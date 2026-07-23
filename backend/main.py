@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from backend.api.chat import router as chat_router
 
 app = FastAPI(
     title="NyayaSetu AI",
@@ -6,14 +7,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app.include_router(chat_router)
+
 @app.get("/")
 def home():
-    return {
-        "message": "Welcome to NyayaSetu AI"
-    }
+    return {"message": "Welcome to NyayaSetu AI"}
 
 @app.get("/health")
 def health():
-    return {
-        "status": "Server is running successfully"
-    }
+    return {"status": "Server is running successfully"}
