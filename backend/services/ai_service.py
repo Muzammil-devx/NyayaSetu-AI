@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 from google import genai
+from backend.prompts.system_prompt import SYSTEM_PROMPT
+
 
 # Load .env file
 load_dotenv()
@@ -13,10 +15,18 @@ MODEL=os.getenv("GEMINI_MODEL", "models/gemini-flash-latest")  # Default to a sp
 client = genai.Client(api_key=API_KEY)
 
 def ask_gemini(prompt: str) -> str:
+
+    full_prompt = f"""
+    {SYSTEM_PROMPT}
+
+    User Question:
+    {prompt}
+    """
+    
     try:
         response = client.models.generate_content(
             model=MODEL,
-            contents=prompt
+            contents=full_prompt
         )
         return response.text
     
