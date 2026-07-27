@@ -1,5 +1,6 @@
 from fastapi import APIRouter, UploadFile, File
 from backend.services.pdf_service import extract_text_from_pdf
+from backend.services.ai_service import analyze_document
 import shutil
 import os
 
@@ -24,11 +25,11 @@ async def upload_pdf(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     pdf_text = extract_text_from_pdf(file_path)
+    analysis = analyze_document(pdf_text)
 
     return {
-        "message": "PDF uploaded successfully",
+        "message": "PDF analyzed successfully",
         "filename": file.filename,
-        "characters": len(pdf_text),
-        "preview": pdf_text[:500]  # Return the first 500 characters as a preview
+        "analysis": analysis
     }
 
