@@ -30,6 +30,6 @@ async def upload_pdf(file: UploadFile = File(...)):
     return {
         "message": "PDF analyzed successfully",
         "filename": file.filename,
-        "analysis": analysis
+        "analysis": analysis.model_dump()  # Convert Pydantic model to dictionary for JSON response
     }
 

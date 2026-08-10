@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from google import genai
 from backend.prompts.system_prompt import SYSTEM_PROMPT
 from backend.prompts.document_prompt import LEGAL_DOCUMENT_PROMPT
+from backend.models.document import DocumentAnalysis
 
 
 # Load .env file
@@ -34,12 +35,14 @@ def ask_gemini(prompt: str) -> str:
     except Exception as e:
         return f"Gemini API Error: {str(e)}"
 
-def analyze_document(document_text: str) -> str:
+def analyze_document(document_text: str) -> DocumentAnalysis:
 
     full_prompt = f"""
     {LEGAL_DOCUMENT_PROMPT}
 
-    Legal Document:
+    Analyze the following legal document.
+
+    Document:
     {document_text}
     """
 
@@ -47,9 +50,13 @@ def analyze_document(document_text: str) -> str:
         response = client.models.generate_content(
             model=MODEL,
             contents=full_prompt,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": DocumentAnalysis,
+            },
         )
-        return response.text
+        return DocumentAnalysis.model_validate_json(response.text)
 
     except Exception as e:
-        return f"Gemini API Error: {str(e)}"
+        raise RuntimeError(f"Gemini document analysis failed: {str(e)}")
 
