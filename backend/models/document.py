@@ -10,4 +10,9 @@ class DocumentAnalysis(BaseModel):
     important_dates: list[str]
     disclaimer: str
 
+class DocumentUploadResponse(BaseModel):
+    message: str
+    filename: str
+    analysis: DocumentAnalysis
 
+    

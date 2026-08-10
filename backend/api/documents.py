@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File
 from backend.services.pdf_service import extract_text_from_pdf
 from backend.services.ai_service import analyze_document
+from backend.models.document import DocumentUploadResponse
 import shutil
 import os
 
@@ -13,7 +14,10 @@ UPLOAD_FOLDER = "uploads"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@router.post("/upload")
+@router.post(
+    "/upload",
+    response_model=DocumentUploadResponse
+)
 async def upload_pdf(file: UploadFile = File(...)):
 
     file_path = os.path.join(
