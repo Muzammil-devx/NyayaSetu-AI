@@ -3,7 +3,9 @@ from dotenv import load_dotenv
 from google import genai
 from backend.prompts.system_prompt import SYSTEM_PROMPT
 from backend.prompts.document_prompt import LEGAL_DOCUMENT_PROMPT
+from backend.prompts.rights_prompt import LEGAL_RIGHTS_PROMPT
 from backend.models.document import DocumentAnalysis
+from backend.models.rights import RightsAnalysis
 
 
 # Load .env file
@@ -60,3 +62,27 @@ def analyze_document(document_text: str) -> DocumentAnalysis:
     except Exception as e:
         raise RuntimeError(f"Gemini document analysis failed: {str(e)}")
 
+def analyze_rights(question: str) -> RightsAnalysis:
+
+    full_prompt = f"""
+    {LEGAL_RIGHTS_PROMPT}
+
+    User's Legal Rights Question:
+    {question}
+    """
+
+    try:
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=full_prompt,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": RightsAnalysis,
+            },
+        )
+        return RightsAnalysis.model_validate_json(response.text)
+
+    except Exception as e:
+        raise RuntimeError(f"Gemini legal rights analysis failed: {str(e)}")
+
+        

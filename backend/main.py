@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from backend.api.chat import router as chat_router
 from backend.api.documents import router as documents_router
+from backend.api.rights import router as rights_router
 
 app = FastAPI(
     title="NyayaSetu AI",
@@ -10,6 +11,7 @@ app = FastAPI(
 
 app.include_router(chat_router)
 app.include_router(documents_router)
+app.include_router(rights_router)
 
 @app.get("/")
 def home():
