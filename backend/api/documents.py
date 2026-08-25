@@ -1,6 +1,15 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import (
+    APIRouter,
+    UploadFile,
+    File,
+    Depends,
+    HTTPException
+)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from firebase_admin import auth, firestore
 from backend.services.pdf_service import extract_text_from_pdf
 from backend.services.ai_service import analyze_document
+from backend.services.firebase_service import db
 from backend.models.document import DocumentUploadResponse
 import shutil
 import os
@@ -10,6 +19,7 @@ router = APIRouter(
     tags=["Documents"]
 )
 
+security = HTTPBearer()
 UPLOAD_FOLDER = "uploads"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -18,22 +28,89 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     "/upload",
     response_model=DocumentUploadResponse
 )
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(
+    file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+    ):
 
+    # Verify Firebase ID Token
+    id_token = credentials.credentials
+
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Firebase ID token"
+        )
+
+    # Get logged-in user's UID
+    uid = decoded_token["uid"]
+
+    # Validate uploaded file
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are allowed"
+        )
+
+    # Save PDF locally
     file_path = os.path.join(
         UPLOAD_FOLDER,
         file.filename
     )
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    pdf_text = extract_text_from_pdf(file_path)
-    analysis = analyze_document(pdf_text)
+        # Extract PDF text
+        pdf_text = extract_text_from_pdf(file_path)
 
-    return {
-        "message": "PDF analyzed successfully",
-        "filename": file.filename,
-        "analysis": analysis.model_dump()  # Convert Pydantic model to dictionary for JSON response
-    }
+        if not pdf_text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract text from the PDF"
+            )
+
+        # Analyze document with AI
+        analysis = analyze_document(pdf_text)
+
+        # Save document analysis to Firestore
+        document_ref = db.collection("documents").document()
+
+        document_ref.set({
+            "userId": uid,
+            "filename": file.filename,
+            "analysis": analysis.model_dump(),
+            "uploadedAt": firestore.SERVER_TIMESTAMP,
+            "status": "analyzed"
+        })
+
+        # Return response
+        return {
+            "message": "PDF analyzed successfully",
+            "filename": file.filename,
+            "analysis": analysis.model_dump()  # Convert Pydantic model to dictionary for JSON response
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        error_message = str(e)
+
+        # Gemini temporary availability problem
+        if "503" in error_message or "UNAVAILABLE" in error_message:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is temporarily unavailable. Please try again later."
+            )
+
+        # Other unexpected errors
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document processing failed: {error_message}"
+        )
 

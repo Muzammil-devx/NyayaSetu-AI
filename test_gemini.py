@@ -9,18 +9,23 @@ client = genai.Client(
 )
 
 MODELS = [
-    "models/gemini-2.0-flash-lite-001",
-    "models/gemini-flash-latest",
-    "models/gemini-3.5-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.0-flash-lite-001",
+    "gemini-flash-latest",
 ]
 
 for model in MODELS:
+    print("\n" + "=" * 60)
     print(f"\nTesting: {model}")
+    print("=" * 60)
 
     try:
         response = client.models.generate_content(
             model=model,
-            contents="Say Hello"
+            contents="Say Hello in one short sentence."
         )
 
         print("SUCCESS")
@@ -28,7 +33,7 @@ for model in MODELS:
 
     except Exception as e:
         print("FAILED")
-        print(type(e).__name__)
-        print(e)
+        print("Error type:", type(e).__name__)
+        print("Error:", e)
 
         

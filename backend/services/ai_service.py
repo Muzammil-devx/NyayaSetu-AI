@@ -13,7 +13,7 @@ load_dotenv()
 
 # Read API key and Model name from .env file
 API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL=os.getenv("GEMINI_MODEL", "models/gemini-flash-latest")  # Default to a specific model if not set model at .env file
+MODEL=os.getenv("GEMINI_MODEL", "gemini-3.6-flash")  # Default to a specific model if not set model at .env file
 
 # Create a Gemini client
 client = genai.Client(api_key=API_KEY)
