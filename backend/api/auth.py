@@ -27,18 +27,40 @@ async def get_current_user(
     id_token = credentials.credentials
 
     try:
+        # Verify Firebase ID token
         decoded_token = auth.verify_id_token(id_token)
 
+        uid = decoded_token["uid"]
+        email = decoded_token.get("email")
+
+        # Get user's Firestore profile
+        user_ref = db.collection("users").document(uid)
+        user_doc = user_ref.get()
+
+        # If profile does not exist
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=404,
+                detail="User profile not found"
+            )
+
+        profile = user_doc.to_dict()
+
         return {
-            "message": "User authenticated successfully",
-            "uid": decoded_token["uid"],
-            "email": decoded_token.get("email")
+            "uid": uid,
+            "email": email,
+            "name": profile.get("name"),
+            "role": profile.get("role")
         }
 
-    except Exception:
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        print(f"Error fetching current user: {e}")
         raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired Firebase ID token"
+            status_code=500,
+            detail="Failed to fetch user profile"
         )
 
 
