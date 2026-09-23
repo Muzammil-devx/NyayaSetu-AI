@@ -114,3 +114,49 @@ async def upload_pdf(
             detail=f"Document processing failed: {error_message}"
         )
 
+@router.get("")
+async def get_user_documents(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+
+    # Verify Firebase ID Token
+    id_token = credentials.credentials
+
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+
+        # Get Logged-in user's UID
+        uid = decoded_token["uid"]
+
+        # Get documents belonging to this user
+        documents_ref = db.collection("documents")
+        
+        documents = documents_ref.where(
+            filter=firestore.FieldFilter(
+                "userId",
+                "==",
+                uid
+            )
+        ).stream()
+        
+        result = []
+
+        for document in documents:
+            document_data = document.to_dict()
+
+            result.append({
+                "id": document.id,
+                "filename": document_data.get("filename"),
+                "analysis": document_data.get("analysis"),
+                "uploadedAt": document_data.get("uploadedAt"),
+                "status": document_data.get("status")
+            })
+        return {
+            "documents": result
+        }
+    
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Firebase ID token"
+        )
