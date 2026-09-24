@@ -7,6 +7,7 @@ from firebase_admin import auth, firestore
 from backend.services.firebase_service import db
 from backend.services.ai_service import analyze_rights
 
+
 router = APIRouter(
     prefix="/api",
     tags=["Chat"]
@@ -14,8 +15,10 @@ router = APIRouter(
 
 security = HTTPBearer()
 
+
 class ChatRequest(BaseModel):
     message: str
+
 
 @router.post("/chat")
 def chat(
@@ -47,6 +50,7 @@ def chat(
         )
 
     try:
+        # Analyze legal rights using Gemini
         analysis = analyze_rights(request.message)
 
         # Save chat history to Firestore
@@ -62,6 +66,7 @@ def chat(
             "createdAt": firestore.SERVER_TIMESTAMP
         })
 
+        # Return AI response
         return {
             "uid": uid,
             "question": analysis.question,
@@ -72,10 +77,21 @@ def chat(
         }
 
     except Exception as e:
+        error_message = str(e)
+
+        # Gemini temporary availability problem
+        if "503" in error_message or "UNAVAILABLE" in error_message:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is temporarily unavailable. Please try again later."
+            )
+
+        # Other unexpected errors
         raise HTTPException(
             status_code=500,
-            detail=f"Legal rights analysis failed: {str(e)}"
+            detail=f"Legal rights analysis failed: {error_message}"
         )
+
 
 @router.get("/chats")
 def get_chat_history(
@@ -102,7 +118,13 @@ def get_chat_history(
         # Fetch only chats belonging to the logged-in user
         chats_ref = (
             db.collection("chats")
-            .where("userId", "==", uid)
+            .where(
+                filter=firestore.FieldFilter(
+                    "userId",
+                    "==",
+                    uid
+                )
+            )
             .stream()
         )
 
@@ -126,7 +148,7 @@ def get_chat_history(
             key=lambda chat: chat["createdAt"] or "",
             reverse=True
         )
-        
+
         return {
             "chats": chats
         }
