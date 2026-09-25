@@ -430,6 +430,12 @@ function App() {
               </button>
             </form>
 
+            {error && (
+              <p className="error-message">
+                {error}
+              </p>
+            )}
+
             {/* Current AI Response */}
             {chatResponse && (
               <div className="rights-response">

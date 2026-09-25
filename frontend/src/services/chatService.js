@@ -30,11 +30,19 @@ export const askLegalQuestion = async (message) => {
 
     // Check backend response
     if (!response.ok) {
-        const errorData = await response.json();
+        let errorMessage = "Failed to get legal rights response.";
 
-        throw new Error(
-            errorData.detail || "Failed to get legal rights response."
-        );
+        try {
+            const errorData = await response.json();
+
+            if (errorData.detail) {
+                errorMessage = errorData.detail;
+            }
+        } catch (error) {
+            console.error("Failed to read error response:", error);
+        }
+
+        throw new Error(errorMessage);
     }
 
     // Return AI response
