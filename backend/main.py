@@ -1,9 +1,18 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.api.chat import router as chat_router
 from backend.api.documents import router as documents_router
 from backend.api.rights import router as rights_router
 from backend.api.auth import router as auth_router
+
+load_dotenv()
+
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL",
+    "http://localhost:5173"
+)
 
 app = FastAPI(
     title="NyayaSetu AI",
@@ -14,7 +23,7 @@ app = FastAPI(
 # Allow React frontend to communicate with FastAPI backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173",],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

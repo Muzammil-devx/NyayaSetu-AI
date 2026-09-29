@@ -35,8 +35,23 @@ export const askLegalQuestion = async (message) => {
         try {
             const errorData = await response.json();
 
-            if (errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+                const validationError = errorData.detail.find(
+                    (error) => error.type === "string_too_long"
+                );
+
+                if (validationError) {
+                    errorMessage =
+                        "Question is too long. Please keep your question within 1000 characters.";
+                } else {
+                    errorMessage =
+                        "Invalid request. Please check your question and try again.";
+                }
+            } else if (typeof errorData.detail === "string") {
                 errorMessage = errorData.detail;
+            } else if (errorData.detail) {
+                errorMessage =
+                    "Invalid request. Please check your question and try again.";
             }
         } catch (error) {
             console.error("Failed to read error response:", error);

@@ -11,8 +11,11 @@ from backend.services.pdf_service import extract_text_from_pdf
 from backend.services.ai_service import analyze_document
 from backend.services.firebase_service import db
 from backend.models.document import DocumentUploadResponse
+
 import shutil
 import os
+import uuid
+
 
 router = APIRouter(
     prefix="/api/documents",
@@ -20,9 +23,12 @@ router = APIRouter(
 )
 
 security = HTTPBearer()
+
 UPLOAD_FOLDER = "uploads"
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 
 @router.post(
     "/upload",
@@ -31,7 +37,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 async def upload_pdf(
     file: UploadFile = File(...),
     credentials: HTTPAuthorizationCredentials = Depends(security)
-    ):
+):
 
     # Verify Firebase ID Token
     id_token = credentials.credentials
@@ -48,22 +54,54 @@ async def upload_pdf(
     # Get logged-in user's UID
     uid = decoded_token["uid"]
 
-    # Validate uploaded file
-    if not file.filename.lower().endswith(".pdf"):
+    # Validate filename
+    original_filename = file.filename or ""
+
+    if not original_filename.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=400,
-            detail="Only PDF files are allowed"
+            detail="Only PDF files are allowed."
         )
 
-    # Save PDF locally
+    # Generate safe unique filename
+    safe_filename = f"{uuid.uuid4()}.pdf"
+
     file_path = os.path.join(
         UPLOAD_FOLDER,
-        file.filename
+        safe_filename
     )
 
     try:
+        # Save uploaded file safely with size limit
+        total_size = 0
+
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+
+            while True:
+                chunk = await file.read(1024 * 1024)
+
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+
+                if total_size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="PDF file size must not exceed 10 MB."
+                    )
+
+                buffer.write(chunk)
+
+        # Basic PDF file validation
+        with open(file_path, "rb") as pdf_file:
+            file_signature = pdf_file.read(5)
+
+        if file_signature != b"%PDF-":
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid PDF file."
+            )
 
         # Extract PDF text
         pdf_text = extract_text_from_pdf(file_path)
@@ -71,7 +109,7 @@ async def upload_pdf(
         if not pdf_text.strip():
             raise HTTPException(
                 status_code=400,
-                detail="Could not extract text from the PDF"
+                detail="Could not extract text from the PDF."
             )
 
         # Analyze document with AI
@@ -82,7 +120,7 @@ async def upload_pdf(
 
         document_ref.set({
             "userId": uid,
-            "filename": file.filename,
+            "filename": original_filename,
             "analysis": analysis.model_dump(),
             "uploadedAt": firestore.SERVER_TIMESTAMP,
             "status": "analyzed"
@@ -91,8 +129,8 @@ async def upload_pdf(
         # Return response
         return {
             "message": "PDF analyzed successfully",
-            "filename": file.filename,
-            "analysis": analysis.model_dump()  # Convert Pydantic model to dictionary for JSON response
+            "filename": original_filename,
+            "analysis": analysis.model_dump()
         }
 
     except HTTPException:
@@ -108,11 +146,27 @@ async def upload_pdf(
                 detail="AI service is temporarily unavailable. Please try again later."
             )
 
+        # Gemini quota/rate limit problem
+        if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is temporarily unavailable due to usage limits. Please try again later."
+            )
+
         # Other unexpected errors
         raise HTTPException(
             status_code=500,
-            detail=f"Document processing failed: {error_message}"
+            detail="Document processing failed. Please try again later."
         )
+
+    finally:
+        # Remove temporary uploaded PDF
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+
 
 @router.get("")
 async def get_user_documents(
@@ -125,12 +179,12 @@ async def get_user_documents(
     try:
         decoded_token = auth.verify_id_token(id_token)
 
-        # Get Logged-in user's UID
+        # Get logged-in user's UID
         uid = decoded_token["uid"]
 
         # Get documents belonging to this user
         documents_ref = db.collection("documents")
-        
+
         documents = documents_ref.where(
             filter=firestore.FieldFilter(
                 "userId",
@@ -138,7 +192,7 @@ async def get_user_documents(
                 uid
             )
         ).stream()
-        
+
         result = []
 
         for document in documents:
@@ -151,10 +205,11 @@ async def get_user_documents(
                 "uploadedAt": document_data.get("uploadedAt"),
                 "status": document_data.get("status")
             })
+
         return {
             "documents": result
         }
-    
+
     except Exception:
         raise HTTPException(
             status_code=401,

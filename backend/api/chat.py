@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from firebase_admin import auth, firestore
 
@@ -17,7 +17,10 @@ security = HTTPBearer()
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(
+        min_length=1,
+        max_length=1000,
+    )
 
 
 @router.post("/chat")
@@ -43,7 +46,9 @@ def chat(
         )
 
     # Validate question
-    if not request.message.strip():
+    question = request.message.strip()
+
+    if not question:
         raise HTTPException(
             status_code=400,
             detail="Question cannot be empty."
@@ -51,7 +56,7 @@ def chat(
 
     try:
         # Analyze legal rights using Gemini
-        analysis = analyze_rights(request.message)
+        analysis = analyze_rights(question)
 
         # Save chat history to Firestore
         chat_ref = db.collection("chats").document()
@@ -86,10 +91,19 @@ def chat(
                 detail="AI service is temporarily unavailable. Please try again later."
             )
 
-        # Other unexpected errors
+        # Gemini quota/rate limit exceeded
+        if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is temporarily unavailable due to usage limits. Please try again later."
+            )
+
+        # Never expose internal exception details
+        print(f"Chat processing error: {error_message}")
+
         raise HTTPException(
             status_code=500,
-            detail=f"Legal rights analysis failed: {error_message}"
+            detail="Unable to process your legal rights question. Please try again later."
         )
 
 
@@ -154,7 +168,9 @@ def get_chat_history(
         }
 
     except Exception as e:
+        print(f"Chat history error: {str(e)}")
+
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch chat history: {str(e)}"
+            detail="Unable to load chat history. Please try again later."
         )
