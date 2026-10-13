@@ -79,3 +79,44 @@ export const getUserDocuments = async () => {
     // Return documents
     return await response.json();
 };
+
+// Delete a document belonging to the logged-in user
+export const deleteDocument = async (documentId) => {
+    // Check Firebase Login
+    const user = auth.currentUser;
+
+    if (!user) {
+        throw new Error("Please login before deleting a document.");
+    }
+
+    // Get fresh Firebase ID token
+    const idToken = await user.getIdToken();
+
+    // Send DELETE request to FastAPI
+    const response = await fetch(
+        `${API_URL}/api/documents/${encodeURIComponent(documentId)}`,
+        {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${idToken}`,
+            },
+        }
+    );
+
+    // Handle backend errors
+    if (!response.ok) {
+        let errorMessage = "Failed to delete document.";
+
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.detail || errorMessage;
+        } catch {
+            // Keep the default error message if response is not JSON
+        }
+
+        throw new Error(errorMessage);
+    }
+
+    // Return deletion confirmation
+    return await response.json();
+};

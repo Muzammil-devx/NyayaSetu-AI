@@ -222,3 +222,59 @@ async def get_user_documents(
             status_code=500,
             detail="Failed to retrieve documents"
         )
+
+
+@router.delete("/{document_id}")
+async def delete_user_document(
+    document_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    # Verify Firebase ID Token
+    id_token = credentials.credentials
+
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        uid = decoded_token["uid"]
+
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Firebase ID token"
+        )
+
+    # Find the requested Firestore document
+    try:
+        document_ref = db.collection("documents").document(document_id)
+        document_snapshot = document_ref.get()
+
+        if not document_snapshot.exists:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found"
+            )
+
+        document_data = document_snapshot.to_dict()
+
+        # Ensure the document belongs to the logged-in user
+        if document_data.get("userId") != uid:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found"
+            )
+
+        # Delete the Firestore record
+        document_ref.delete()
+
+        return {
+            "message": "Document deleted successfully",
+            "document_id": document_id
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete document"
+        )

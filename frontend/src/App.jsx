@@ -15,7 +15,10 @@ import {
   getChatHistory,
 } from "./services/chatService";
 
-import { getUserDocuments } from "./services/documentService";
+import {
+  getUserDocuments,
+  deleteDocument,
+} from "./services/documentService";
 
 import "./App.css";
 import { uploadDocument } from "./services/documentService";
@@ -235,6 +238,39 @@ function App() {
 
   const handleViewAnalysis = (document) => {
     setSelectedDocument(document);
+  };
+
+  const handleDeleteDocument = async (document) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${document.filename}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+
+    try {
+      await deleteDocument(document.id);
+
+      setMessage(
+        `"${document.filename}" deleted successfully.`
+      );
+
+      // Clear analysis if the deleted document is currently selected
+      if (selectedDocument?.id === document.id) {
+        setSelectedDocument(null);
+      }
+
+      // Refresh the Recent Documents list
+      await loadDocuments();
+    } catch (err) {
+      console.error("Error deleting document:", err);
+
+      setError(err.message || "Failed to delete document.");
+    }
   };
 
   const handleLogout = async () => {
@@ -543,11 +579,21 @@ function App() {
                       {document.status}
                     </p>
 
-                    <button
-                    onClick={() => handleViewAnalysis(document)}
-                    >
-                      View Analysis
-                    </button>
+                    <div className="document-actions">
+                      <button
+                        onClick={() => handleViewAnalysis(document)}
+                      >
+                        View Analysis
+                      </button>
+
+                      <button
+                        className="delete-document-button"
+                        onClick={() => handleDeleteDocument(document)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+
                   </div>
                 ))}
               </div>
