@@ -182,7 +182,14 @@ async def get_user_documents(
         # Get logged-in user's UID
         uid = decoded_token["uid"]
 
-        # Get documents belonging to this user
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Firebase ID token"
+        )
+
+    # Get documents belonging to this user
+    try:
         documents_ref = db.collection("documents")
 
         documents = documents_ref.where(
@@ -212,6 +219,6 @@ async def get_user_documents(
 
     except Exception:
         raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired Firebase ID token"
+            status_code=500,
+            detail="Failed to retrieve documents"
         )
