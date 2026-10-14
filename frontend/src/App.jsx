@@ -456,6 +456,47 @@ function App() {
                 ))}
               </ul>
 
+              <h3>Contract Completeness Checker</h3>
+
+              {Array.isArray(analysis.completeness_check) &&
+              analysis.completeness_check.length > 0 ? (
+                <div className="completeness-check-list">
+                  {analysis.completeness_check.map((item, index) => (
+                    <article
+                      className="completeness-check-card"
+                      key={`${item.field_name}-${index}`}
+                    >
+                      <div className="completeness-check-header">
+                        <h4>{item.field_name || "Document Field"}</h4>
+
+                        <span
+                          className={`completeness-status completeness-status-${String(
+                            item.status || "Needs Review"
+                          ).toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          {item.status || "Needs Review"}
+                        </span>
+                      </div>
+
+                      <p>
+                        {item.explanation ||
+                          "No explanation was provided for this field."}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p>
+                  Completeness check results are unavailable for this document.
+                  Please check the API response if this message persists.
+                </p>
+              )}
+
+              <p className="completeness-check-note">
+                This is a preliminary check of information found in the document.
+                A missing field does not automatically mean the document is invalid.
+              </p>
+
               <h3>Clause Risk Radar</h3>
 
               {Array.isArray(analysis.clause_risks) &&
@@ -811,6 +852,41 @@ function App() {
                   )
                 )}
               </ul>
+
+              <h3>Contract Completeness Checker</h3>
+
+              {Array.isArray(selectedDocument.analysis?.completeness_check) &&
+              selectedDocument.analysis.completeness_check.length > 0 ? (
+                <div className="completeness-check-list">
+                  {selectedDocument.analysis.completeness_check.map((item, index) => (
+                    <article className="completeness-check-card" key={`${item.field_name}-${index}`}>
+                      <div className="completeness-check-header">
+                        <h4>{item.field_name || "Document Field"}</h4>
+                        <span
+                          className={`completeness-status completeness-status-${String(
+                            item.status || "Needs Review"
+                          ).toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          {item.status || "Needs Review"}
+                        </span>
+                      </div>
+                      <p>
+                        {item.explanation || "No explanation was provided for this field."}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p>
+                  Completeness check results are unavailable for this document.
+                  Upload the PDF again to run the updated checker.
+                </p>
+              )}
+
+              <p className="completeness-check-note">
+                This is a preliminary check of information found in the document.
+                A missing field does not automatically mean the document is invalid.
+              </p>
 
               <h3>Clause Risk Radar</h3>
 

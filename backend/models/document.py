@@ -18,6 +18,16 @@ class ClauseRisk(BaseModel):
         description="Questions the user should clarify or verify"
     )
 
+class CompletenessItem(BaseModel):
+    field_name: str = Field(
+        description="Name of the important document field being checked"
+    )
+    status: Literal["Found", "Needs Review", "Not Found"] = Field(
+        description="Whether the field is present, needs verification, or was not found"
+    )
+    explanation: str = Field(
+        description="Evidence from the document or explanation of what needs checking"
+    )
 
 class DocumentAnalysis(BaseModel):
     document_type: str
@@ -29,6 +39,10 @@ class DocumentAnalysis(BaseModel):
     clause_risks: list[ClauseRisk] = Field(
         default_factory=list,
         description="Structured Clause Risk Radar findings"
+    )
+    completeness_check: list[CompletenessItem] = Field(
+        default_factory=list,
+        description="Structured completeness checks for important document fields"
     )
     important_dates: list[str]
     disclaimer: str
