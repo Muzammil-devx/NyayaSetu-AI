@@ -298,6 +298,44 @@ function App() {
   if (user) {
     return (
       <div className="app">
+        <aside className="app-sidebar">
+          <a className="sidebar-brand" href="#dashboard-top">
+            <span className="brand-mark">N</span>
+            <span>
+              <strong>NyayaSetu</strong>
+              <small>LEGAL INTELLIGENCE</small>
+            </span>
+          </a>
+
+          <p className="sidebar-label">WORKSPACE</p>
+
+          <nav className="sidebar-nav" aria-label="Dashboard navigation">
+            <a className="sidebar-link active" href="#dashboard-top">
+              <span>▦</span> Dashboard
+            </a>
+            <a className="sidebar-link" href="#document-upload">
+              <span>▤</span> Analyze Document
+            </a>
+            <a className="sidebar-link" href="#rights-chat">
+              <span>⚖</span> Know Your Rights
+            </a>
+            <a className="sidebar-link" href="#recent-documents">
+              <span>◷</span> Recent Documents
+            </a>
+          </nav>
+
+          <div className="sidebar-note">
+            <span className="sidebar-note-icon">✦</span>
+            <strong>Legal clarity, made simple.</strong>
+            <p>Understand documents and explore your rights with AI assistance.</p>
+          </div>
+
+          <div className="sidebar-footer">
+            <span className="sidebar-status-dot" />
+            AI assistant workspace
+          </div>
+        </aside>
+
         <nav className="navbar">
           <div className="logo"> NyayaSetu AI</div>
 
@@ -312,7 +350,7 @@ function App() {
 
 
         <main className="dashboard">
-          <section className="hero">
+          <section className="hero" id="dashboard-top">
             <h1>Welcome, {user.name}!</h1>
 
             <p>
@@ -321,7 +359,7 @@ function App() {
           </section>
 
           <section className="feature-grid">
-            <div className="feature-card">
+            <div className="feature-card" id="document-upload">
               <h2>📄 Analyze Document</h2>
 
               <p>
@@ -545,7 +583,7 @@ function App() {
           </section>
           
           {/* Recent Documents */}
-          <section className="documents-section">
+          <section className="documents-section" id="recent-documents">
             <h2>Recent Documents</h2>
 
             {documentsLoading ? (

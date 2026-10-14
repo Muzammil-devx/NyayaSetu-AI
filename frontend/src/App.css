@@ -625,3 +625,142 @@ button:focus-visible {
     padding: 16px;
   }
 }
+
+/* =========================================================
+   NyayaSetu AI — consolidated dashboard and sidebar theme
+   ========================================================= */
+:root {
+  --ns-navy: #263b36;
+  --ns-blue: #496b91;
+  --ns-page: #f5f5f1;
+  --ns-card: #ffffff;
+  --ns-border: #e1e5df;
+  --ns-muted: #69756f;
+  --ns-text: #28332f;
+  --ns-red: #b42332;
+  --ns-radius: 14px;
+  --ns-shadow: 0 3px 12px rgba(38, 59, 54, 0.045);
+}
+
+body { background: var(--ns-page); color: var(--ns-text); }
+.app { min-height: 100vh; background: var(--ns-page); color: var(--ns-text); }
+
+/* Sidebar: muted green, restrained contrast */
+.app:has(.navbar) .app-sidebar {
+  position: fixed; inset: 0 auto 0 0; z-index: 30;
+  display: flex; flex-direction: column; width: 248px; min-height: 100vh;
+  padding: 25px 16px 18px; color: #edf1ed;
+  background: #293c36; border-right: 1px solid #3a4d46;
+}
+.sidebar-brand { display:flex; align-items:center; gap:11px; padding:4px 7px 28px; color:#fff; text-decoration:none; }
+.brand-mark { display:grid; flex:0 0 39px; width:39px; height:39px; place-items:center; color:#fff; background:#587967; border-radius:11px; font-size:22px; font-weight:800; }
+.sidebar-brand strong, .sidebar-brand small { display:block; }
+.sidebar-brand strong { font-size:17px; letter-spacing:-.3px; }
+.sidebar-brand small { margin-top:3px; color:#b9c9bf; font-size:9px; font-weight:700; letter-spacing:1.1px; }
+.sidebar-label { margin:7px 10px 12px; color:#a7b9ae; font-size:10px; font-weight:700; letter-spacing:1.25px; }
+.sidebar-nav { display:grid; gap:6px; }
+.sidebar-nav .sidebar-link { display:flex; align-items:center; gap:12px; min-height:44px; padding:10px 12px; color:#cbd7d0; background:transparent; border-radius:9px; font-size:13px; font-weight:600; text-decoration:none; transition:background 160ms ease,color 160ms ease; }
+.sidebar-nav .sidebar-link span { display:inline-grid; width:21px; place-items:center; font-size:17px; }
+.sidebar-nav .sidebar-link:hover, .sidebar-nav .sidebar-link.active { color:#fff; background:#3a5048; }
+.sidebar-nav .sidebar-link.active { box-shadow:inset 3px 0 #a9c4b3; }
+.sidebar-note { margin-top:auto; padding:16px 14px; background:#344a41; border:1px solid #455b51; border-radius:12px; }
+.sidebar-note-icon { display:inline-grid; width:28px; height:28px; margin-bottom:10px; place-items:center; color:#e4eee7; background:#587967; border-radius:8px; }
+.sidebar-note strong { display:block; color:#fff; font-size:12px; }
+.sidebar-note p { margin:7px 0 0; color:#c5d2ca; font-size:11px; line-height:1.7; }
+.sidebar-footer { display:flex; align-items:center; gap:9px; padding:20px 5px 3px; color:#b9c9bf; font-size:11px; }
+.sidebar-status-dot { width:8px; height:8px; background:#7ac19b; border-radius:50%; box-shadow:0 0 0 4px rgba(122,193,155,.12); }
+
+/* Top bar and main content */
+.app:has(.navbar) .navbar { position:relative; top:auto; z-index:20; margin-left:248px; min-height:72px; padding:14px 32px; background:#fff; border-bottom:1px solid var(--ns-border); box-shadow:none; backdrop-filter:none; }
+.logo { color:var(--ns-navy); }
+.user-name { color:#5e6a63; }
+.app:has(.navbar) .logout-button { color:#35453e; background:#fff; border:1px solid var(--ns-border); box-shadow:none; }
+.app:has(.navbar) .logout-button:hover:not(:disabled) { background:#f0f2ee; color:#293b34; }
+.app:has(.navbar) .dashboard { width:calc(100% - 248px); max-width:none; margin-left:248px; padding:34px clamp(20px,3vw,42px) 60px; background:var(--ns-page); }
+
+/* Warm, understated welcome panel */
+.app:has(.navbar) .hero { margin-bottom:28px; padding:28px 30px; background:#e7ece6; border:1px solid #dce4dc; border-radius:16px; box-shadow:none; }
+.app:has(.navbar) .hero h1 { color:#293b34; font-size:clamp(27px,3vw,36px); letter-spacing:-.8px; }
+.app:has(.navbar) .hero p { max-width:660px; color:#5c6b62; font-size:15px; line-height:1.7; }
+.app:has(.navbar) .feature-card,
+.app:has(.navbar) .documents-section,
+.app:has(.navbar) .rights-chat-section { min-width:0; padding:26px; background:#fff; border:1px solid var(--ns-border); border-radius:var(--ns-radius); box-shadow:var(--ns-shadow); }
+.app:has(.navbar) .feature-card { transition:border-color 180ms ease,box-shadow 180ms ease,transform 180ms ease; }
+.app:has(.navbar) .feature-card:hover { border-color:#cbd7cd; box-shadow:0 8px 22px rgba(38,59,54,.075); transform:translateY(-2px); }
+.app:has(.navbar) .feature-card h2,
+.app:has(.navbar) .documents-section h2,
+.app:has(.navbar) .rights-chat-section h2,
+.app:has(.navbar) .documents-section h3,
+.app:has(.navbar) .rights-chat-section h3 { color:var(--ns-navy); }
+.app:has(.navbar) p { color:var(--ns-muted); }
+.app:has(.navbar) button:not(.logout-button):not(.delete-document-button):not(.delete-button) { background:var(--ns-blue); box-shadow:none; }
+.app:has(.navbar) button:not(.logout-button):not(.delete-document-button):not(.delete-button):hover:not(:disabled) { background:#3d5c7d; }
+.app:has(.navbar) input, .app:has(.navbar) textarea, .app:has(.navbar) select { border-color:#d6ded7; border-radius:9px; }
+.app:has(.navbar) input:focus, .app:has(.navbar) textarea:focus, .app:has(.navbar) select:focus { border-color:#789581; box-shadow:0 0 0 3px rgba(120,149,129,.14); }
+
+/* Upload panel */
+.app:has(.navbar) .upload-area { padding:16px; background:#f8f9f6; border:1px dashed #cbd7cd; border-radius:12px; }
+.app:has(.navbar) .upload-area input[type="file"] { background:#fff; border:1px solid var(--ns-border); }
+
+/* Analysis and rights answer */
+.app:has(.navbar) .rights-response { padding:24px; background:#f6f8f6; border:1px solid #e0e6df; border-radius:12px; }
+.app:has(.navbar) .disclaimer { color:#805d18; background:#fff8e8; border-color:#f0dfb3; }
+.app:has(.navbar) .chat-history { border-top-color:var(--ns-border); }
+.app:has(.navbar) .chat-history-card { background:#f8f9f6; border-color:var(--ns-border); border-radius:11px; }
+.app:has(.navbar) .empty-documents { background:#f8f9f6; border-color:#d5ddd5; box-shadow:none; }
+.app:has(.navbar) .error-message { color:var(--ns-red); background:#fff4f4; border-color:#f5d6d8; }
+
+/* Recent documents — keep View Analysis and Delete visually distinct */
+.app:has(.navbar) .recent-documents-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:20px; }
+.app:has(.navbar) .recent-document-card { min-width:0; padding:21px; background:#fff; border:1px solid var(--ns-border); border-radius:12px; transition:border-color 160ms ease,box-shadow 160ms ease; }
+.app:has(.navbar) .recent-document-card:hover { border-color:#cbd7cd; box-shadow:0 6px 18px rgba(38,59,54,.055); }
+.app:has(.navbar) .recent-document-card h3 { margin:0 0 13px; overflow-wrap:anywhere; color:var(--ns-navy); font-size:16px; line-height:1.5; }
+.app:has(.navbar) .recent-document-card p { margin:8px 0; color:var(--ns-muted); font-size:14px; line-height:1.65; }
+.app:has(.navbar) .document-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:14px; padding-top:13px; border-top:1px solid #edf0eb; }
+.app:has(.navbar) .document-actions button { flex:1 1 auto; min-height:38px; margin-top:0; padding:9px 14px; font-size:13px; }
+/* Delete button intentionally has a soft red fill and red border. */
+.app:has(.navbar) .document-actions .delete-document-button,
+.app:has(.navbar) .document-actions .delete-button { color:#b42332 !important; background:#fff1f1 !important; border:1px solid #efc9cc !important; box-shadow:none !important; }
+.app:has(.navbar) .document-actions .delete-document-button:hover:not(:disabled),
+.app:has(.navbar) .document-actions .delete-button:hover:not(:disabled) { color:#fff !important; background:#b42332 !important; border-color:#b42332 !important; }
+.app:has(.navbar) .document-actions .delete-document-button:focus-visible,
+.app:has(.navbar) .document-actions .delete-button:focus-visible { outline-color:rgba(180,35,50,.28); }
+
+/* Keep navigation targets visible after clicking sidebar links */
+#dashboard-top, #document-upload, #rights-chat, #recent-documents { scroll-margin-top:24px; }
+
+@media (max-width:768px) {
+  .app:has(.navbar) .app-sidebar { position:static; width:100%; min-height:auto; padding:13px 14px; }
+  .sidebar-brand { padding:4px 7px 12px; }
+  .sidebar-label, .sidebar-note, .sidebar-footer { display:none; }
+  .sidebar-nav { display:flex; gap:7px; overflow-x:auto; padding-bottom:3px; }
+  .sidebar-nav .sidebar-link { flex:0 0 auto; min-height:38px; padding:8px 10px; font-size:12px; }
+  .sidebar-nav .sidebar-link span { width:auto; font-size:14px; }
+  .app:has(.navbar) .navbar { margin-left:0; min-height:60px; padding:13px 18px; }
+  .app:has(.navbar) .dashboard { width:100%; margin-left:0; padding:24px 18px 42px; }
+  .app:has(.navbar) .feature-grid, .app:has(.navbar) .recent-documents-list { grid-template-columns:minmax(0,1fr); }
+  .app:has(.navbar) .hero { padding:24px 22px; }
+  .app:has(.navbar) .feature-card, .app:has(.navbar) .documents-section, .app:has(.navbar) .rights-chat-section { padding:21px; }
+  #dashboard-top, #document-upload, #rights-chat, #recent-documents { scroll-margin-top:20px; }
+}
+
+@media (max-width:480px) {
+  .app:has(.navbar) .navbar { align-items:flex-start; flex-direction:row; gap:10px; }
+  .app:has(.navbar) .logo { font-size:20px; }
+  .app:has(.navbar) .user-section { gap:8px; }
+  .app:has(.navbar) .user-name { max-width:120px; }
+  .app:has(.navbar) .dashboard { padding:18px 12px 32px; }
+  .app:has(.navbar) .hero { padding:21px 18px; }
+  .app:has(.navbar) .hero h1 { font-size:27px; }
+  .app:has(.navbar) .feature-card, .app:has(.navbar) .documents-section, .app:has(.navbar) .rights-chat-section { padding:17px; border-radius:12px; }
+  .app:has(.navbar) .document-actions { flex-direction:column; align-items:stretch; }
+  .app:has(.navbar) .document-actions button { width:100%; }
+  .app:has(.documents-section form) .dashboard { padding:12px; }
+  .app:has(.documents-section form) .documents-section { padding:16px; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  html { scroll-behavior:auto; }
+  *, *::before, *::after { scroll-behavior:auto !important; transition-duration:.01ms !important; animation-duration:.01ms !important; }
+}
+
