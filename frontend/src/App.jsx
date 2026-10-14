@@ -456,6 +456,64 @@ function App() {
                 ))}
               </ul>
 
+              <h3>Clause Risk Radar</h3>
+
+              {Array.isArray(analysis.clause_risks) &&
+              analysis.clause_risks.length > 0 ? (
+                <div className="clause-risk-list">
+                  {analysis.clause_risks.map((risk, index) => (
+                    <article
+                      className="clause-risk-card"
+                      key={`${risk.severity}-${index}`}
+                    >
+                      <div className="clause-risk-header">
+                        <h4>Potential Risk {index + 1}</h4>
+
+                        <span
+                          className={`risk-severity risk-severity-${String(
+                            risk.severity || "Low"
+                          ).toLowerCase()}`}
+                        >
+                          {risk.severity || "Unclassified"}
+                        </span>
+                      </div>
+
+                      <p>
+                        <strong>Supporting clause:</strong>{" "}
+                        {risk.clause_text || "No supporting clause supplied."}
+                      </p>
+
+                      <p>
+                        <strong>Why it may matter:</strong>{" "}
+                        {risk.explanation || "No explanation supplied."}
+                      </p>
+
+                      {Array.isArray(risk.verification_questions) &&
+                      risk.verification_questions.length > 0 && (
+                        <>
+                          <strong>Questions to verify</strong>
+                          <ul>
+                            {risk.verification_questions.map((question, qIndex) => (
+                              <li key={qIndex}>{question}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p>
+                  No structured clause-risk findings were returned for this document.
+                  Review the general risks above before making important decisions.
+                </p>
+              )}
+
+              <p className="risk-radar-note">
+                AI-generated screening only; this is not a legal opinion or a finding
+                that a clause is unlawful.
+              </p>
+
               <h3>Important Dates</h3>
 
               <ul>
@@ -692,6 +750,64 @@ function App() {
                   )
                 )}
               </ul>
+
+              <h3>Clause Risk Radar</h3>
+
+              {Array.isArray(selectedDocument.analysis?.clause_risks) &&
+              selectedDocument.analysis.clause_risks.length > 0 ? (
+                <div className="clause-risk-list">
+                  {selectedDocument.analysis.clause_risks.map((risk, index) => (
+                    <article
+                      className="clause-risk-card"
+                      key={`${risk.severity}-${index}`}
+                    >
+                      <div className="clause-risk-header">
+                        <h4>Potential Risk {index + 1}</h4>
+
+                        <span
+                          className={`risk-severity risk-severity-${String(
+                            risk.severity || "Low"
+                          ).toLowerCase()}`}
+                        >
+                          {risk.severity || "Unclassified"}
+                        </span>
+                      </div>
+
+                      <p>
+                        <strong>Supporting clause:</strong>{" "}
+                        {risk.clause_text || "No supporting clause supplied."}
+                      </p>
+
+                      <p>
+                        <strong>Why it may matter:</strong>{" "}
+                        {risk.explanation || "No explanation supplied."}
+                      </p>
+
+                      {Array.isArray(risk.verification_questions) &&
+                      risk.verification_questions.length > 0 && (
+                        <>
+                          <strong>Questions to verify</strong>
+                          <ul>
+                            {risk.verification_questions.map((question, qIndex) => (
+                              <li key={qIndex}>{question}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p>
+                  No structured clause-risk findings were returned for this document.
+                  Review the general risks above before making important decisions.
+                </p>
+              )}
+
+              <p className="risk-radar-note">
+                AI-generated screening only; this is not a legal opinion or a finding
+                that a clause is unlawful.
+              </p>
 
               <h3>Important Dates</h3>
               <ul>
