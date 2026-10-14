@@ -572,27 +572,88 @@ function App() {
             {chatResponse && (
               <div className="rights-response">
 
+                <h3>Situation Summary</h3>
+                <p>
+                  {chatResponse.situation_summary ||
+                    chatResponse.answer ||
+                    "No situation summary available."}
+                </p>
+
                 <h3>Answer</h3>
 
                 <p>{chatResponse.answer}</p>
 
-                <h3>Your Rights</h3>
+                <h3>Your Possible Rights</h3>
+                {chatResponse.rights?.length > 0 ? (
+                  <ul>
+                    {chatResponse.rights.map((right, index) => (
+                      <li key={index}>{right}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No rights information available.</p>
+                )}
 
-                <ul>
-                  {chatResponse.rights.map((right, index) => (
-                    <li key={index}>{right}</li>
-                  ))}
-                </ul>
+                <h3>Step-by-Step Action Plan</h3>
+                {chatResponse.action_plan?.length > 0 ? (
+                  <ol>
+                    {chatResponse.action_plan.map((step, index) => (
+                      <li key={index}>{step}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>No action plan available.</p>
+                )}
+
+                <h3>Evidence Checklist</h3>
+                {chatResponse.evidence_checklist?.length > 0 ? (
+                  <ul className="evidence-checklist">
+                    {chatResponse.evidence_checklist.map((item, index) => (
+                      <li key={index}>
+                        <label>
+                          <input type="checkbox" />
+                          <span>{item}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No evidence checklist available.</p>
+                )}
+
+                <h3>Questions to Clarify</h3>
+                {chatResponse.questions_to_clarify?.length > 0 ? (
+                  <ul>
+                    {chatResponse.questions_to_clarify.map((question, index) => (
+                      <li key={index}>{question}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No additional questions suggested.</p>
+                )}
 
                 <h3>Important Points</h3>
-
-                <ul>
-                  {chatResponse.important_points.map(
-                    (point, index) => (
+                {chatResponse.important_points?.length > 0 ? (
+                  <ul>
+                    {chatResponse.important_points.map((point, index) => (
                       <li key={index}>{point}</li>
-                    )
-                  )}
-                </ul>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No additional points available.</p>
+                )}
+
+                <h3>When to Seek Help</h3>
+                {chatResponse.when_to_seek_help?.length > 0 ? (
+                  <ul>
+                    {chatResponse.when_to_seek_help.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>Consider consulting a qualified legal professional for
+                    important or uncertain legal matters.</p>
+                )}
 
                 <div className="disclaimer">
                   <strong>Disclaimer:</strong>

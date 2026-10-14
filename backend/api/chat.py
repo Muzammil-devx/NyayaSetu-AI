@@ -28,15 +28,9 @@ def chat(
     request: ChatRequest,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-
-    # Get Firebase ID token
-    id_token = credentials.credentials
-
     # Verify Firebase ID token
     try:
-        decoded_token = auth.verify_id_token(id_token)
-
-        # Get logged-in user's UID
+        decoded_token = auth.verify_id_token(credentials.credentials)
         uid = decoded_token["uid"]
 
     except Exception:
@@ -45,7 +39,6 @@ def chat(
             detail="Invalid or expired Firebase ID token"
         )
 
-    # Validate question
     question = request.message.strip()
 
     if not question:
@@ -55,50 +48,42 @@ def chat(
         )
 
     try:
-        # Analyze legal rights using Gemini
+        # Generate Rights Navigator analysis
         analysis = analyze_rights(question)
 
-        # Save chat history to Firestore
+        # Complete structured response
+        result = analysis.model_dump()
+
+        # Save all fields to Firestore
         chat_ref = db.collection("chats").document()
 
         chat_ref.set({
             "userId": uid,
-            "question": analysis.question,
-            "answer": analysis.answer,
-            "rights": analysis.rights,
-            "important_points": analysis.important_points,
-            "disclaimer": analysis.disclaimer,
+            **result,
             "createdAt": firestore.SERVER_TIMESTAMP
         })
 
-        # Return AI response
+        # Return the full analysis to the frontend
         return {
             "uid": uid,
-            "question": analysis.question,
-            "answer": analysis.answer,
-            "rights": analysis.rights,
-            "important_points": analysis.important_points,
-            "disclaimer": analysis.disclaimer
+            **result
         }
 
     except Exception as e:
         error_message = str(e)
 
-        # Gemini temporary availability problem
         if "503" in error_message or "UNAVAILABLE" in error_message:
             raise HTTPException(
                 status_code=503,
                 detail="AI service is temporarily unavailable. Please try again later."
             )
 
-        # Gemini quota/rate limit exceeded
         if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
             raise HTTPException(
                 status_code=503,
                 detail="AI service is temporarily unavailable due to usage limits. Please try again later."
             )
 
-        # Never expose internal exception details
         print(f"Chat processing error: {error_message}")
 
         raise HTTPException(
@@ -111,15 +96,9 @@ def chat(
 def get_chat_history(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-
-    # Get Firebase ID token
-    id_token = credentials.credentials
-
     # Verify Firebase ID token
     try:
-        decoded_token = auth.verify_id_token(id_token)
-
-        # Get logged-in user's UID
+        decoded_token = auth.verify_id_token(credentials.credentials)
         uid = decoded_token["uid"]
 
     except Exception:
@@ -129,7 +108,6 @@ def get_chat_history(
         )
 
     try:
-        # Fetch only chats belonging to the logged-in user
         chats_ref = (
             db.collection("chats")
             .where(
@@ -144,28 +122,35 @@ def get_chat_history(
 
         chats = []
 
-        for chat in chats_ref:
-            chat_data = chat.to_dict()
+        for chat_doc in chats_ref:
+            chat_data = chat_doc.to_dict()
 
             chats.append({
-                "id": chat.id,
-                "question": chat_data.get("question"),
-                "answer": chat_data.get("answer"),
+                "id": chat_doc.id,
+                "question": chat_data.get("question", ""),
+                "answer": chat_data.get("answer", ""),
                 "rights": chat_data.get("rights", []),
                 "important_points": chat_data.get("important_points", []),
-                "disclaimer": chat_data.get("disclaimer"),
+                "situation_summary": chat_data.get("situation_summary", ""),
+                "action_plan": chat_data.get("action_plan", []),
+                "evidence_checklist": chat_data.get("evidence_checklist", []),
+                "questions_to_clarify": chat_data.get("questions_to_clarify", []),
+                "when_to_seek_help": chat_data.get("when_to_seek_help", []),
+                "disclaimer": chat_data.get("disclaimer", ""),
                 "createdAt": chat_data.get("createdAt")
             })
 
-        # Sort latest chats first
+        # Sort newest chats first
         chats.sort(
-            key=lambda chat: chat["createdAt"] or "",
+            key=lambda item: (
+                item["createdAt"].timestamp()
+                if item["createdAt"] is not None
+                else 0
+            ),
             reverse=True
         )
 
-        return {
-            "chats": chats
-        }
+        return {"chats": chats}
 
     except Exception as e:
         print(f"Chat history error: {str(e)}")
