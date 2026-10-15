@@ -1,7 +1,9 @@
 import importlib
 import io
 import json
+import os
 import sys
+import tempfile
 import types
 import unittest
 from contextlib import contextmanager
@@ -87,8 +89,23 @@ class ApiSecurityTests(unittest.TestCase):
             "answer": "General information.",
             "rights": [],
         }
+        self.document_analysis = {
+            "document_type": "Agreement",
+            "summary": "A short agreement.",
+            "important_clauses": [],
+            "rights": [],
+            "obligations": [],
+            "risks": [],
+            "clause_risks": [],
+            "completeness_check": [],
+            "important_dates": [],
+            "disclaimer": "Informational only.",
+        }
         self.fake_ai.analyze_rights.return_value = SimpleNamespace(
             model_dump=lambda: self.analysis
+        )
+        self.fake_ai.analyze_document.return_value = SimpleNamespace(
+            model_dump=lambda: self.document_analysis
         )
 
         verify_patch = patch.object(
@@ -433,6 +450,168 @@ class ApiSecurityTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
         document_ref.delete.assert_not_called()
+
+    def test_document_owner_can_delete_saved_analysis_record(self):
+        document_ref = self.fake_db.collection.return_value.document.return_value
+        snapshot = MagicMock()
+        snapshot.exists = True
+        snapshot.to_dict.return_value = {"userId": "user-a"}
+        document_ref.get.return_value = snapshot
+
+        response = self.client.delete(
+            "/api/documents/doc-a",
+            headers={"Authorization": "Bearer dummy-token"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        document_ref.delete.assert_called_once_with()
+
+    def test_document_upload_saves_owner_analysis_and_cleans_pdf_on_success(self):
+        with tempfile.TemporaryDirectory() as upload_dir:
+            with (
+                patch.object(self.documents, "UPLOAD_FOLDER", upload_dir),
+                patch.object(
+                    self.documents,
+                    "extract_text_from_pdf",
+                    return_value="Extracted contract text.",
+                ) as extract_text,
+            ):
+                response = self.client.post(
+                    "/api/documents/upload",
+                    headers={"Authorization": "Bearer dummy-token"},
+                    files={
+                        "file": (
+                            "agreement.pdf",
+                            b"%PDF-1.7 test content",
+                            "application/pdf",
+                        )
+                    },
+                )
+            files_after_request = os.listdir(upload_dir)
+
+        self.assertEqual(response.status_code, 200, response.text)
+        extract_text.assert_called_once()
+        self.fake_ai.analyze_document.assert_called_once_with(
+            "Extracted contract text."
+        )
+        saved_record = (
+            self.fake_db.collection.return_value.document.return_value.set.call_args.args[0]
+        )
+        self.assertEqual(saved_record["userId"], "user-a")
+        self.assertEqual(saved_record["filename"], "agreement.pdf")
+        self.assertEqual(saved_record["analysis"], self.document_analysis)
+        self.assertEqual(files_after_request, [])
+
+    def test_invalid_uploads_are_rejected_and_temporary_files_are_cleaned(self):
+        with tempfile.TemporaryDirectory() as upload_dir:
+            with patch.object(self.documents, "UPLOAD_FOLDER", upload_dir):
+                wrong_extension = self.client.post(
+                    "/api/documents/upload",
+                    headers={"Authorization": "Bearer dummy-token"},
+                    files={
+                        "file": ("agreement.txt", b"not a pdf", "text/plain")
+                    },
+                )
+                invalid_signature = self.client.post(
+                    "/api/documents/upload",
+                    headers={"Authorization": "Bearer dummy-token"},
+                    files={
+                        "file": ("agreement.pdf", b"not a pdf", "application/pdf")
+                    },
+                )
+
+            with (
+                patch.object(self.documents, "UPLOAD_FOLDER", upload_dir),
+                patch.object(self.documents, "MAX_FILE_SIZE", 5),
+            ):
+                oversized = self.client.post(
+                    "/api/documents/upload",
+                    headers={"Authorization": "Bearer dummy-token"},
+                    files={
+                        "file": (
+                            "large.pdf",
+                            b"%PDF-oversize",
+                            "application/pdf",
+                        )
+                    },
+                )
+
+            self.assertEqual(os.listdir(upload_dir), [])
+
+        self.assertEqual(wrong_extension.status_code, 400)
+        self.assertEqual(invalid_signature.status_code, 400)
+        self.assertEqual(oversized.status_code, 400)
+        self.fake_ai.analyze_document.assert_not_called()
+
+    def test_document_upload_cleans_pdf_after_analysis_failure(self):
+        with tempfile.TemporaryDirectory() as upload_dir:
+            with (
+                patch.object(self.documents, "UPLOAD_FOLDER", upload_dir),
+                patch.object(
+                    self.documents,
+                    "extract_text_from_pdf",
+                    return_value="Extracted contract text.",
+                ),
+                patch.object(
+                    self.documents,
+                    "analyze_document",
+                    side_effect=RuntimeError("simulated analysis failure"),
+                ),
+            ):
+                response = self.client.post(
+                    "/api/documents/upload",
+                    headers={"Authorization": "Bearer dummy-token"},
+                    files={
+                        "file": (
+                            "agreement.pdf",
+                            b"%PDF-1.7 test content",
+                            "application/pdf",
+                        )
+                    },
+                )
+
+            self.assertEqual(os.listdir(upload_dir), [])
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json()["detail"],
+            "Document processing failed. Please try again later.",
+        )
+
+    def test_document_upload_cleanup_failure_does_not_expose_exception_details(self):
+        with tempfile.TemporaryDirectory() as upload_dir:
+            with (
+                patch.object(self.documents, "UPLOAD_FOLDER", upload_dir),
+                patch.object(
+                    self.documents,
+                    "extract_text_from_pdf",
+                    return_value="Extracted contract text.",
+                ),
+                patch.object(
+                    self.documents.os,
+                    "remove",
+                    side_effect=OSError("cleanup-private-detail"),
+                ) as remove_file,
+            ):
+                response = self.client.post(
+                    "/api/documents/upload",
+                    headers={"Authorization": "Bearer dummy-token"},
+                    files={
+                        "file": (
+                            "agreement.pdf",
+                            b"%PDF-1.7 test content",
+                            "application/pdf",
+                        )
+                    },
+                )
+                remaining_files = os.listdir(upload_dir)
+
+            remove_file.assert_called_once()
+            self.assertEqual(len(remaining_files), 1)
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["message"], "PDF analyzed successfully")
+        self.assertNotIn("cleanup-private-detail", response.text)
 
     def test_chat_history_query_is_scoped_to_authenticated_owner(self):
         chat = MagicMock()

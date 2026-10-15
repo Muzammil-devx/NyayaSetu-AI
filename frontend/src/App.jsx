@@ -23,6 +23,8 @@ import {
 import "./App.css";
 import { uploadDocument } from "./services/documentService";
 
+const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
+
 function App() {
   const [isSignup, setIsSignup] = useState(false);
 
@@ -132,8 +134,14 @@ function App() {
       return;
     }
 
-    if (file.type !== "application/pdf") {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
       setError("Only PDF files are allowed.");
+      setSelectedFile(null);
+      return;
+    }
+
+    if (file.size > MAX_DOCUMENT_SIZE) {
+      setError("PDF file size must not exceed 10 MB.");
       setSelectedFile(null);
       return;
     }
@@ -368,6 +376,23 @@ function App() {
               </p>
 
               <div className="upload-area">
+                <aside className="upload-privacy-notice" aria-label="Document privacy notice">
+                  <strong>Document privacy</strong>
+                  <p>
+                    To analyze a PDF, its extracted text is sent to the configured
+                    Google Gemini service. The PDF is temporarily written to this
+                    server's local uploads folder while processing; cleanup is
+                    attempted afterward, but a cleanup failure may leave a local copy.
+                  </p>
+                  <p>
+                    Firestore stores the filename and AI-generated analysis with
+                    your account for recent documents. Deleting a document removes
+                    that Firestore record. The app does not control or verify the
+                    AI provider's data retention. Do not upload documents you are
+                    not authorized to share.
+                  </p>
+                </aside>
+
                 <input
                 type="file"
                 accept=".pdf,application/pdf"

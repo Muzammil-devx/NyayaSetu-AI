@@ -231,6 +231,29 @@ p {
   overflow-wrap: anywhere;
 }
 
+.upload-privacy-notice {
+  width: 100%;
+  padding: 12px 14px;
+  color: #4d5b54;
+  background: #f1f5f1;
+  border: 1px solid #d8e1d8;
+  border-left: 4px solid #66856f;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.upload-privacy-notice strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #293b34;
+  font-size: 13px;
+}
+
+.upload-privacy-notice p + p {
+  margin-top: 8px;
+}
+
 /* Document sections and analysis */
 
 .documents-section,
