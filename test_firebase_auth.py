@@ -6,54 +6,64 @@ import urllib.request
 
 from dotenv import load_dotenv
 
-load_dotenv()
+def main():
+    load_dotenv()
 
-API_KEY = os.getenv("FIREBASE_WEB_API_KEY")
-EMAIL = os.getenv("FIREBASE_TEST_EMAIL")
-PASSWORD = os.getenv("FIREBASE_TEST_PASSWORD")
+    api_key = os.getenv("FIREBASE_WEB_API_KEY")
+    email = os.getenv("FIREBASE_TEST_EMAIL")
+    password = os.getenv("FIREBASE_TEST_PASSWORD")
 
-if not API_KEY:
-    raise RuntimeError("FIREBASE_WEB_API_KEY is missing from .env")
+    missing_values = [
+        name
+        for name, value in (
+            ("FIREBASE_WEB_API_KEY", api_key),
+            ("FIREBASE_TEST_EMAIL", email),
+            ("FIREBASE_TEST_PASSWORD", password),
+        )
+        if not value
+    ]
+    if missing_values:
+        raise RuntimeError(
+            "Missing required Firebase smoke-test configuration: "
+            + ", ".join(missing_values)
+        )
 
-if not EMAIL:
-    raise RuntimeError("FIREBASE_TEST_EMAIL is missing from .env")
+    url = (
+        "https://identitytoolkit.googleapis.com/v1/"
+        "accounts:signInWithPassword?"
+        + urllib.parse.urlencode({"key": api_key})
+    )
+    payload = {
+        "email": email,
+        "password": password,
+        "returnSecureToken": True,
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
 
-if not PASSWORD:
-    raise RuntimeError("FIREBASE_TEST_PASSWORD is missing from .env")
+    try:
+        with urllib.request.urlopen(request) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            if not data.get("idToken"):
+                print("Firebase login failed: response did not contain an ID token.")
+                return 1
 
-url = (
-    "https://identitytoolkit.googleapis.com/v1/"
-    "accounts:signInWithPassword?"
-    + urllib.parse.urlencode({"key": API_KEY})
-)
+        print("Firebase login successful.")
+        return 0
+    except urllib.error.HTTPError as error:
+        error.close()
+        print(f"Firebase login failed (HTTP {error.code}).")
+        return 1
+    except urllib.error.URLError:
+        print("Firebase login failed due to a connection error.")
+        return 1
 
-payload = {
-    "email": EMAIL,
-    "password": PASSWORD,
-    "returnSecureToken": True,
-}
 
-request = urllib.request.Request(
-    url,
-    data=json.dumps(payload).encode("utf-8"),
-    headers={"Content-Type": "application/json"},
-    method="POST",
-)
-
-try:
-    with urllib.request.urlopen(request) as response:
-        data = json.loads(response.read().decode("utf-8"))
-        
-        print("\nFirebase login successful!")
-        print("Email:", data.get("email"))
-        print("Local ID:", data.get("localId"))
-
-        print("\nID Token:")
-        print(data.get("idToken"))
-    
-except urllib.error.HTTPError as e:
-    error_body = e.read().decode("utf-8")
-    print("\nFirebase login failed:")
-    print(error_body)
+if __name__ == "__main__":
+    raise SystemExit(main())
 
     
