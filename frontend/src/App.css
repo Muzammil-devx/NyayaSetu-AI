@@ -845,6 +845,12 @@ body { background: var(--ns-page); color: var(--ns-text); }
   border-color: #cbe6d3;
 }
 
+.risk-severity-unrated {
+  color: #59645e;
+  background: #f0f2f0;
+  border-color: #d7ddd8;
+}
+
 .clause-risk-card p {
   line-height: 1.65;
   overflow-wrap: anywhere;
@@ -934,4 +940,82 @@ body { background: var(--ns-page); color: var(--ns-text); }
   font-size: 13px;
   line-height: 1.6;
   margin-top: 14px;
+}
+
+.evidence-findings {
+  margin: 24px 0;
+}
+
+.evidence-findings h3 {
+  margin: 0 0 8px;
+}
+
+.evidence-findings-note,
+.evidence-unverified-note {
+  color: #69756f;
+  font-size: 13px;
+}
+
+.legacy-analysis-note {
+  margin: 12px 0 18px;
+  padding: 12px 14px;
+  color: #72551a;
+  background: #fff8e8;
+  border: 1px solid #f0dfb3;
+  border-left: 4px solid #b78a30;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.evidence-findings-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.evidence-finding-card {
+  min-width: 0;
+  padding: 14px 16px;
+  background: #f8f9f6;
+  border: 1px solid #e1e5df;
+  border-radius: 9px;
+}
+
+.evidence-finding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.evidence-status {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.evidence-status-verified {
+  color: #247547;
+  background: #eaf6ee;
+  border-color: #cbe6d3;
+}
+
+.evidence-status-unverified {
+  color: #805d18;
+  background: #fff8e8;
+  border-color: #f0dfb3;
+}
+
+.evidence-finding-card blockquote {
+  margin: 10px 0;
+  padding: 10px 12px;
+  color: #35453e;
+  background: #ffffff;
+  border-left: 3px solid #66856f;
+  overflow-wrap: anywhere;
 }

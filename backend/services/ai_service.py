@@ -4,7 +4,7 @@ from google import genai
 from backend.prompts.system_prompt import SYSTEM_PROMPT
 from backend.prompts.document_prompt import LEGAL_DOCUMENT_PROMPT
 from backend.prompts.rights_prompt import LEGAL_RIGHTS_PROMPT
-from backend.models.document import DocumentAnalysis
+from backend.models.document import DocumentAnalysis, verify_document_evidence
 from backend.models.rights import RightsAnalysis
 
 
@@ -57,7 +57,8 @@ def analyze_document(document_text: str) -> DocumentAnalysis:
                 "response_schema": DocumentAnalysis,
             },
         )
-        return DocumentAnalysis.model_validate_json(response.text)
+        analysis = DocumentAnalysis.model_validate_json(response.text)
+        return verify_document_evidence(analysis, document_text)
 
     except Exception as e:
         raise RuntimeError(f"Gemini document analysis failed: {str(e)}")

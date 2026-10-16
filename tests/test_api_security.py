@@ -16,6 +16,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from firebase_admin import auth
 from firebase_admin.exceptions import FirebaseError
+from google import genai
+from pydantic import ValidationError
+
+from backend.models.document import (
+    ClauseRisk,
+    CompletenessItem,
+    DocumentAnalysis,
+    EvidenceFinding,
+    verify_document_evidence,
+)
 
 import test_firebase_auth
 import test_gemini
@@ -122,6 +132,127 @@ class ApiSecurityTests(unittest.TestCase):
         app.include_router(self.documents.router)
         self.client = TestClient(app, raise_server_exceptions=False)
         self.addCleanup(self.client.close)
+
+    def test_document_analysis_verifies_exact_excerpts_and_rejects_unsupported_quotes(self):
+        analysis = DocumentAnalysis(
+            important_clauses=["Rent is due monthly"],
+            risks=["The deposit may be withheld"],
+            evidence_findings=[
+                EvidenceFinding(
+                    finding_type="Important Clause",
+                    finding="Rent is due monthly",
+                    evidence_text="Rent is due monthly",
+                    explanation="This sets the payment frequency.",
+                    review_action="Confirm the due date.",
+                ),
+                EvidenceFinding(
+                    finding_type="Risk",
+                    finding="The deposit may be withheld",
+                    evidence_text="The tenant forfeits all deposit funds",
+                ),
+            ],
+            clause_risks=[
+                ClauseRisk(
+                    severity="High",
+                    clause_text="The tenant forfeits all deposit funds",
+                    explanation="This may affect the deposit.",
+                    verification_questions=["When can deductions be made?"],
+                ),
+                ClauseRisk(
+                    severity="Medium",
+                    clause_text="Rent is due monthly",
+                    explanation="Confirm the payment date.",
+                    verification_questions=["What is the due date?"],
+                ),
+            ],
+            completeness_check=[
+                CompletenessItem(
+                    field_name="Rent amount",
+                    status="Found",
+                    evidence_text="Monthly rent is INR 10,000",
+                ),
+                CompletenessItem(
+                    field_name="Signatures",
+                    status="Not Found",
+                ),
+            ],
+        )
+
+        verify_document_evidence(
+            analysis,
+            "Rent is due monthly. The deposit is refundable after inspection.",
+        )
+
+        self.assertTrue(analysis.evidence_findings[0].evidence_verified)
+        self.assertEqual(
+            analysis.evidence_findings[0].evidence_text,
+            "Rent is due monthly",
+        )
+        self.assertEqual(analysis.important_clauses, ["Rent is due monthly"])
+        self.assertEqual(analysis.risks, [])
+        unsupported = analysis.evidence_findings[1]
+        self.assertFalse(unsupported.evidence_verified)
+        self.assertIsNone(unsupported.evidence_text)
+        self.assertIn("could be verified", unsupported.explanation)
+
+        risk = analysis.clause_risks[0]
+        self.assertFalse(risk.evidence_verified)
+        self.assertEqual(risk.clause_text, "")
+        self.assertIsNone(risk.severity)
+        self.assertEqual(risk.verification_questions, [])
+        self.assertIn("Insufficient verified document evidence", risk.explanation)
+        self.assertTrue(analysis.clause_risks[1].evidence_verified)
+        self.assertEqual(analysis.clause_risks[1].severity, "Medium")
+
+        found_item, missing_item = analysis.completeness_check
+        self.assertEqual(found_item.status, "Needs Review")
+        self.assertIsNone(found_item.evidence_text)
+        self.assertIn("could not be verified", found_item.explanation)
+        self.assertEqual(missing_item.status, "Not Found")
+        self.assertIn("not found in the extracted text", missing_item.explanation)
+        self.assertIn("original document", missing_item.explanation)
+
+    def test_document_analysis_defaults_missing_fields_and_rejects_malformed_fields(self):
+        incomplete = DocumentAnalysis.model_validate_json("{}")
+
+        self.assertEqual(incomplete.document_type, "Unknown")
+        self.assertEqual(incomplete.important_clauses, [])
+        self.assertEqual(incomplete.evidence_findings, [])
+        self.assertTrue(incomplete.disclaimer)
+
+        with self.assertRaises(ValidationError):
+            DocumentAnalysis.model_validate_json('{"risks":"not-a-list"}')
+
+    def test_incomplete_but_verified_findings_receive_cautious_review_fallbacks(self):
+        analysis = DocumentAnalysis(
+            clause_risks=[ClauseRisk(clause_text="Payment is due monthly")],
+            evidence_findings=[
+                EvidenceFinding(
+                    finding_type="Important Clause",
+                    finding="Monthly payment",
+                    evidence_text="Payment is due monthly",
+                )
+            ],
+            completeness_check=[
+                CompletenessItem(
+                    field_name="Payment terms",
+                    status="Found",
+                    evidence_text="Payment is due monthly",
+                )
+            ],
+        )
+
+        verify_document_evidence(analysis, "Payment is due monthly.")
+
+        risk = analysis.clause_risks[0]
+        self.assertTrue(risk.evidence_verified)
+        self.assertIsNone(risk.severity)
+        self.assertIn("risk level was not established", risk.explanation)
+        self.assertTrue(risk.verification_questions)
+        self.assertTrue(analysis.evidence_findings[0].explanation)
+        self.assertTrue(analysis.evidence_findings[0].review_action)
+        self.assertEqual(analysis.completeness_check[0].status, "Needs Review")
+        self.assertIn("no explanation was supplied", analysis.completeness_check[0].explanation)
 
     def test_route_loader_restores_module_cache_after_exit_and_import_failure(self):
         module_names = (
@@ -501,6 +632,100 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(saved_record["filename"], "agreement.pdf")
         self.assertEqual(saved_record["analysis"], self.document_analysis)
         self.assertEqual(files_after_request, [])
+
+    def test_upload_persists_real_analyzer_output_after_evidence_sanitization(self):
+        ai_client = MagicMock()
+        ai_payload = {
+            "document_type": "Rental Agreement",
+            "summary": "Monthly rent is specified.",
+            "important_clauses": ["Rent is due monthly."],
+            "rights": [],
+            "obligations": [],
+            "risks": ["The deposit is automatically forfeited."],
+            "clause_risks": [
+                {
+                    "severity": "High",
+                    "clause_text": "The deposit is automatically forfeited.",
+                    "explanation": "This may affect the deposit.",
+                    "verification_questions": ["Can deductions be itemized?"],
+                }
+            ],
+            "evidence_findings": [
+                {
+                    "finding_type": "Important Clause",
+                    "finding": "Rent is due monthly.",
+                    "evidence_text": "Rent is due monthly.",
+                    "explanation": "This sets a payment frequency.",
+                    "review_action": "Confirm the due date.",
+                },
+                {
+                    "finding_type": "Risk",
+                    "finding": "The deposit is automatically forfeited.",
+                    "evidence_text": "The deposit is automatically forfeited.",
+                    "explanation": "This may affect the deposit.",
+                    "review_action": "Clarify the deduction conditions.",
+                },
+            ],
+            "completeness_check": [],
+            "important_dates": [],
+            "disclaimer": "Informational only.",
+        }
+        ai_client.models.generate_content.return_value = SimpleNamespace(
+            text=json.dumps(ai_payload)
+        )
+
+        service_name = "backend.services.ai_service"
+        fake_service = sys.modules.pop(service_name)
+        try:
+            with patch.object(genai, "Client", return_value=ai_client):
+                real_ai_service = importlib.import_module(service_name)
+
+            with tempfile.TemporaryDirectory() as upload_dir:
+                with (
+                    patch.object(
+                        self.documents,
+                        "analyze_document",
+                        real_ai_service.analyze_document,
+                    ),
+                    patch.object(self.documents, "UPLOAD_FOLDER", upload_dir),
+                    patch.object(
+                        self.documents,
+                        "extract_text_from_pdf",
+                        return_value="Rent is due monthly. The deposit is refundable after inspection.",
+                    ),
+                ):
+                    response = self.client.post(
+                        "/api/documents/upload",
+                        headers={"Authorization": "Bearer dummy-token"},
+                        files={
+                            "file": (
+                                "agreement.pdf",
+                                b"%PDF-1.7 test content",
+                                "application/pdf",
+                            )
+                        },
+                    )
+                self.assertEqual(os.listdir(upload_dir), [])
+        finally:
+            sys.modules.pop(service_name, None)
+            sys.modules[service_name] = fake_service
+
+        self.assertEqual(response.status_code, 200, response.text)
+        ai_client.models.generate_content.assert_called_once()
+        saved_analysis = (
+            self.fake_db.collection.return_value.document.return_value.set
+            .call_args.args[0]["analysis"]
+        )
+        self.assertEqual(
+            saved_analysis["important_clauses"], ["Rent is due monthly."]
+        )
+        self.assertEqual(saved_analysis["risks"], [])
+        self.assertTrue(saved_analysis["evidence_findings"][0]["evidence_verified"])
+        self.assertFalse(saved_analysis["evidence_findings"][1]["evidence_verified"])
+        self.assertIsNone(saved_analysis["evidence_findings"][1]["evidence_text"])
+        self.assertFalse(saved_analysis["clause_risks"][0]["evidence_verified"])
+        self.assertIsNone(saved_analysis["clause_risks"][0]["severity"])
+        self.assertEqual(saved_analysis["clause_risks"][0]["clause_text"], "")
 
     def test_invalid_uploads_are_rejected_and_temporary_files_are_cleaned(self):
         with tempfile.TemporaryDirectory() as upload_dir:

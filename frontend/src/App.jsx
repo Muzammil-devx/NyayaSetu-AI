@@ -25,6 +25,83 @@ import { uploadDocument } from "./services/documentService";
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
 
+function EvidenceFindings({ findings }) {
+  if (!Array.isArray(findings) || findings.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="evidence-findings">
+      <h3>Evidence and review</h3>
+      <p className="evidence-findings-note">
+        An exact match confirms that the excerpt appears in extracted text; it
+        does not confirm legal accuracy or that the interpretation is correct.
+      </p>
+      <div className="evidence-findings-list">
+        {findings.map((item, index) => (
+          <article
+            className="evidence-finding-card"
+            key={`${item.finding_type || "finding"}-${index}`}
+          >
+            <div className="evidence-finding-header">
+              <strong>{item.finding_type || "Finding"}</strong>
+              <span
+                className={
+                  item.evidence_verified
+                    ? "evidence-status evidence-status-verified"
+                    : "evidence-status evidence-status-unverified"
+                }
+              >
+                {item.evidence_verified ? "Exact excerpt found" : "Unverified"}
+              </span>
+            </div>
+            {item.finding && <p>{item.finding}</p>}
+            {item.evidence_verified && item.evidence_text ? (
+              <blockquote>{item.evidence_text}</blockquote>
+            ) : (
+              <p className="evidence-unverified-note">
+                {item.explanation ||
+                  "No exact supporting excerpt was verified in the extracted text."}
+              </p>
+            )}
+            {item.evidence_verified && item.explanation && (
+              <p>{item.explanation}</p>
+            )}
+            {item.review_action && (
+              <p>
+                <strong>Review:</strong> {item.review_action}
+              </p>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function isLegacyAnalysis(analysis) {
+  if (!analysis || typeof analysis !== "object") {
+    return false;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(analysis, "evidence_findings")) {
+    return false;
+  }
+
+  const findings = [
+    ...(Array.isArray(analysis.clause_risks) ? analysis.clause_risks : []),
+    ...(Array.isArray(analysis.completeness_check)
+      ? analysis.completeness_check
+      : []),
+  ];
+
+  return !findings.some(
+    (finding) =>
+      finding &&
+      Object.prototype.hasOwnProperty.call(finding, "evidence_verified")
+  );
+}
+
 function App() {
   const [isSignup, setIsSignup] = useState(false);
 
@@ -481,6 +558,8 @@ function App() {
                 ))}
               </ul>
 
+              <EvidenceFindings findings={analysis.evidence_findings} />
+
               <h3>Contract Completeness Checker</h3>
 
               {Array.isArray(analysis.completeness_check) &&
@@ -499,7 +578,9 @@ function App() {
                             item.status || "Needs Review"
                           ).toLowerCase().replace(/\s+/g, "-")}`}
                         >
-                          {item.status || "Needs Review"}
+                          {item.status === "Not Found"
+                            ? "Not found in extracted text"
+                            : item.status || "Needs Review"}
                         </span>
                       </div>
 
@@ -507,6 +588,9 @@ function App() {
                         {item.explanation ||
                           "No explanation was provided for this field."}
                       </p>
+                      {item.evidence_verified && item.evidence_text && (
+                        <blockquote>{item.evidence_text}</blockquote>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -518,8 +602,9 @@ function App() {
               )}
 
               <p className="completeness-check-note">
-                This is a preliminary check of information found in the document.
-                A missing field does not automatically mean the document is invalid.
+                “Not found” means the information was not found in extracted text;
+                it may still appear in the original PDF. This is not a legal-validity
+                determination.
               </p>
 
               <h3>Clause Risk Radar</h3>
@@ -537,16 +622,22 @@ function App() {
 
                         <span
                           className={`risk-severity risk-severity-${String(
-                            risk.severity || "Low"
+                            risk.evidence_verified && risk.severity
+                              ? risk.severity
+                              : "unrated"
                           ).toLowerCase()}`}
                         >
-                          {risk.severity || "Unclassified"}
+                          {risk.evidence_verified && risk.severity
+                            ? risk.severity
+                            : "Not assessed"}
                         </span>
                       </div>
 
                       <p>
                         <strong>Supporting clause:</strong>{" "}
-                        {risk.clause_text || "No supporting clause supplied."}
+                        {risk.evidence_verified && risk.clause_text
+                          ? risk.clause_text
+                          : "No exact supporting excerpt was verified in the extracted text."}
                       </p>
 
                       <p>
@@ -827,6 +918,14 @@ function App() {
             <section className="documents-section">
               <h2>Document Analysis</h2>
 
+              {isLegacyAnalysis(selectedDocument.analysis) && (
+                <p className="legacy-analysis-note" role="note">
+                  <strong>Legacy analysis — evidence not verified.</strong>{" "}
+                  Existing clauses and risks are shown for reference; the source
+                  PDF text is not available to re-check them.
+                </p>
+              )}
+
               <p>
                 <strong>Document:</strong>{" "}
                 {selectedDocument.filename}
@@ -878,6 +977,10 @@ function App() {
                 )}
               </ul>
 
+              <EvidenceFindings
+                findings={selectedDocument.analysis?.evidence_findings}
+              />
+
               <h3>Contract Completeness Checker</h3>
 
               {Array.isArray(selectedDocument.analysis?.completeness_check) &&
@@ -892,12 +995,17 @@ function App() {
                             item.status || "Needs Review"
                           ).toLowerCase().replace(/\s+/g, "-")}`}
                         >
-                          {item.status || "Needs Review"}
+                          {item.status === "Not Found"
+                            ? "Not found in extracted text"
+                            : item.status || "Needs Review"}
                         </span>
                       </div>
                       <p>
                         {item.explanation || "No explanation was provided for this field."}
                       </p>
+                      {item.evidence_verified && item.evidence_text && (
+                        <blockquote>{item.evidence_text}</blockquote>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -909,8 +1017,9 @@ function App() {
               )}
 
               <p className="completeness-check-note">
-                This is a preliminary check of information found in the document.
-                A missing field does not automatically mean the document is invalid.
+                “Not found” means the information was not found in extracted text;
+                it may still appear in the original PDF. This is not a legal-validity
+                determination.
               </p>
 
               <h3>Clause Risk Radar</h3>
@@ -928,16 +1037,22 @@ function App() {
 
                         <span
                           className={`risk-severity risk-severity-${String(
-                            risk.severity || "Low"
+                            risk.evidence_verified && risk.severity
+                              ? risk.severity
+                              : "unrated"
                           ).toLowerCase()}`}
                         >
-                          {risk.severity || "Unclassified"}
+                          {risk.evidence_verified && risk.severity
+                            ? risk.severity
+                            : "Not assessed"}
                         </span>
                       </div>
 
                       <p>
                         <strong>Supporting clause:</strong>{" "}
-                        {risk.clause_text || "No supporting clause supplied."}
+                        {risk.evidence_verified && risk.clause_text
+                          ? risk.clause_text
+                          : "No exact supporting excerpt was verified in the extracted text."}
                       </p>
 
                       <p>
