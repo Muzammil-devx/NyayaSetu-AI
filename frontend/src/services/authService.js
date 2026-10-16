@@ -5,10 +5,7 @@ import {
 } from "firebase/auth";
 
 import { auth } from "../firebase/firebase";
-
-
-// Backend API URL
-const API_URL = "http://127.0.0.1:8000";
+import { apiUrl } from "./api";
 
 
 // Signup
@@ -26,7 +23,7 @@ export const signupUser = async (email, password, name) => {
   const idToken = await user.getIdToken();
 
   // 3. Send profile to FastAPI backend
-  const response = await fetch(`${API_URL}/api/auth/profile`, {
+  const response = await fetch(apiUrl("/api/auth/profile"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -85,7 +82,7 @@ export const getCurrentUserProfile = async () => {
   const idToken = await user.getIdToken();
 
   // Request profile from FastAPI
-  const response = await fetch(`${API_URL}/api/auth/me`, {
+  const response = await fetch(apiUrl("/api/auth/me"), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${idToken}`,

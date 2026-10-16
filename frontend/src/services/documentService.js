@@ -1,7 +1,5 @@
 import {auth } from "../firebase/firebase";
-
-// Backend API URL
-const API_URL = "http://127.0.0.1:8000";
+import { apiUrl } from "./api";
 
 // Upload and analyze PDF
 export const uploadDocument = async (file) => {
@@ -21,7 +19,7 @@ export const uploadDocument = async (file) => {
 
     // Send PDF to FastAPI
     const response = await fetch(
-        `${API_URL}/api/documents/upload`,
+        apiUrl("/api/documents/upload"),
         {
             method: "POST",
             headers: {
@@ -58,7 +56,7 @@ export const getUserDocuments = async () => {
 
     // Request user's documents from FastAPI
     const response = await fetch(
-        `${API_URL}/api/documents`,
+        apiUrl("/api/documents"),
         {
             method: "GET",
             headers: {
@@ -94,7 +92,7 @@ export const deleteDocument = async (documentId) => {
 
     // Send DELETE request to FastAPI
     const response = await fetch(
-        `${API_URL}/api/documents/${encodeURIComponent(documentId)}`,
+        apiUrl(`/api/documents/${encodeURIComponent(documentId)}`),
         {
             method: "DELETE",
             headers: {

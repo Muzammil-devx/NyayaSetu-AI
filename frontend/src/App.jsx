@@ -1,1227 +1,439 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 
 import { auth } from "./firebase/firebase";
-
 import {
-  signupUser,
+  getCurrentUserProfile,
   loginUser,
   logoutUser,
-  getCurrentUserProfile,
+  signupUser,
 } from "./services/authService";
-
+import { askLegalQuestion, getChatHistory } from "./services/chatService";
 import {
-  askLegalQuestion,
-  getChatHistory,
-} from "./services/chatService";
-
-import {
-  getUserDocuments,
   deleteDocument,
+  getUserDocuments,
+  uploadDocument,
 } from "./services/documentService";
-
+import {
+  AppShell,
+  AssistantPage,
+  AuthPage,
+  ConversationPage,
+  DashboardPage,
+  DocumentAnalysisView,
+  DocumentsPage,
+  HistoryPage,
+  InformationPage,
+  LandingPage,
+  NotFoundPage,
+  Notice,
+  PageHeading,
+  ProfilePage,
+  UploadPage,
+} from "./AppViews";
 import "./App.css";
-import { uploadDocument } from "./services/documentService";
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
 
-function EvidenceFindings({ findings }) {
-  if (!Array.isArray(findings) || findings.length === 0) {
-    return null;
-  }
+function currentHashPath() {
+  const path = window.location.hash.slice(1).split("?")[0];
+  return path || "/";
+}
 
+function LoadingScreen({ label = "Loading NyayaSetu AI" }) {
   return (
-    <div className="evidence-findings">
-      <h3>Evidence and review</h3>
-      <p className="evidence-findings-note">
-        An exact match confirms that the excerpt appears in extracted text; it
-        does not confirm legal accuracy or that the interpretation is correct.
-      </p>
-      <div className="evidence-findings-list">
-        {findings.map((item, index) => (
-          <article
-            className="evidence-finding-card"
-            key={`${item.finding_type || "finding"}-${index}`}
-          >
-            <div className="evidence-finding-header">
-              <strong>{item.finding_type || "Finding"}</strong>
-              <span
-                className={
-                  item.evidence_verified
-                    ? "evidence-status evidence-status-verified"
-                    : "evidence-status evidence-status-unverified"
-                }
-              >
-                {item.evidence_verified ? "Exact excerpt found" : "Unverified"}
-              </span>
-            </div>
-            {item.finding && <p>{item.finding}</p>}
-            {item.evidence_verified && item.evidence_text ? (
-              <blockquote>{item.evidence_text}</blockquote>
-            ) : (
-              <p className="evidence-unverified-note">
-                {item.explanation ||
-                  "No exact supporting excerpt was verified in the extracted text."}
-              </p>
-            )}
-            {item.evidence_verified && item.explanation && (
-              <p>{item.explanation}</p>
-            )}
-            {item.review_action && (
-              <p>
-                <strong>Review:</strong> {item.review_action}
-              </p>
-            )}
-          </article>
-        ))}
-      </div>
-    </div>
+    <main className="app-loading" role="status" aria-live="polite">
+      <span className="loading-mark">N</span>
+      <span className="spinner" />
+      <p>{label}</p>
+    </main>
   );
 }
 
-function isLegacyAnalysis(analysis) {
-  if (!analysis || typeof analysis !== "object") {
-    return false;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(analysis, "evidence_findings")) {
-    return false;
-  }
-
-  const findings = [
-    ...(Array.isArray(analysis.clause_risks) ? analysis.clause_risks : []),
-    ...(Array.isArray(analysis.completeness_check)
-      ? analysis.completeness_check
-      : []),
-  ];
-
-  return !findings.some(
-    (finding) =>
-      finding &&
-      Object.prototype.hasOwnProperty.call(finding, "evidence_verified")
-  );
+function authErrorMessage(error, signup) {
+  if (error?.code === "auth/email-already-in-use") return "An account already exists for this email.";
+  if (error?.code === "auth/invalid-email") return "Enter a valid email address.";
+  if (error?.code === "auth/weak-password") return "Use a stronger password with at least 6 characters.";
+  if (error?.code === "auth/invalid-credential" || error?.code === "auth/wrong-password") return "Email or password is incorrect.";
+  return signup ? "Account setup could not be completed. Please try again." : "Sign-in could not be completed. Please try again.";
 }
 
 function App() {
-  const [isSignup, setIsSignup] = useState(false);
+  const [path, setPath] = useState(currentHashPath);
+  const [profile, setProfile] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [sessionError, setSessionError] = useState("");
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  const [user, setUser] = useState(null);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
-  const [chatQuestion, setChatQuestion] = useState("");
-  const [chatResponse, setChatResponse] = useState(null);
-  const [chatLoading, setChatLoading] = useState(false);
-
-  const [chatHistory, setChatHistory] = useState([]);
-  const [chatHistoryLoading, setChatHistoryLoading] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
 
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
-
-  const [selectedDocument, setSelectedDocument] = useState(null);
-
-  const [loading, setLoading] = useState(true);
+  const [documentsError, setDocumentsError] = useState("");
+  const [chats, setChats] = useState([]);
+  const [chatsLoading, setChatsLoading] = useState(false);
+  const [chatsError, setChatsError] = useState("");
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [analysis, setAnalysis] = useState(null);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState(null);
+  const [asking, setAsking] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const fileInputRef = useRef(null);
 
-  // Restore Firebase login session after page refresh
+  const navigate = (target) => {
+    window.location.hash = target;
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const profile = await getCurrentUserProfile();
-
-          setUser(profile);
-
-          await loadDocuments();
-          await loadChats();
-        } catch (error) {
-          console.error("Error restoring user session:", error);
-
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
-
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    const syncPath = () => setPath(currentHashPath());
+    window.addEventListener("hashchange", syncPath);
+    return () => window.removeEventListener("hashchange", syncPath);
   }, []);
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    setMessage("");
-    setError("");
-
-    try {
-      if (isSignup) {
-        // Check password confirmation
-        if (password !== confirmPassword) {
-          setError("Passwords do not match.");
-          return;
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        if (active) {
+          setProfile(null);
+          setDocuments([]);
+          setChats([]);
+          setDocumentsLoading(false);
+          setChatsLoading(false);
+          setSessionError("");
+          setAuthReady(true);
         }
-
-        // Create Firebase account
-        await signupUser(email, password, name);
-
-
-        setMessage("Account created successfully!");
-      } else {
-        // Login
-        await loginUser(email, password);
-
-
-        setMessage("Login successful!");
+        return;
       }
-    } catch (err) {
-      console.error(err);
 
-      if (err.code === "auth/email-already-in-use") {
-        setError("This email is already registered.");
-      } else if (err.code === "auth/invalid-email") {
-        setError("Please enter a valid email address.");
-      } else if (err.code === "auth/weak-password") {
-        setError("Password should be at least 6 characters.");
-      } else if (
-        err.code === "auth/invalid-credential" ||
-        err.code === "auth/wrong-password"
-      ) {
-        setError("Invalid email or password.");
-      } else {
-        setError(err.message || "Something went wrong.");
+      try {
+        if (active) {
+          setDocuments([]);
+          setChats([]);
+          setDocumentsLoading(true);
+          setChatsLoading(true);
+          setDocumentsError("");
+          setChatsError("");
+        }
+        const currentProfile = await getCurrentUserProfile();
+        if (active) {
+          setProfile(currentProfile);
+          setSessionError("");
+        }
+      } catch {
+        if (active) {
+          setProfile(null);
+          setSessionError("Your account profile could not be loaded. Please sign in again.");
+        }
+      } finally {
+        if (active) setAuthReady(true);
       }
-    }
-  };
+    });
 
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
-    if (!file) {
+  useEffect(() => {
+    if (!authReady) return;
+    if (path.startsWith("/app/") && !profile) {
+      navigate("/login");
       return;
     }
+    if ((path === "/login" || path === "/signup") && profile) {
+      navigate("/app/dashboard");
+    }
+  }, [authReady, path, profile]);
 
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Only PDF files are allowed.");
-      setSelectedFile(null);
+  useEffect(() => {
+    if (path === "/features") {
+      window.requestAnimationFrame(() => {
+        document.getElementById("features")?.scrollIntoView();
+      });
       return;
     }
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [path]);
 
-    if (file.size > MAX_DOCUMENT_SIZE) {
-      setError("PDF file size must not exceed 10 MB.");
-      setSelectedFile(null);
-      return;
-    }
+  useEffect(() => {
+    if (!profile) return undefined;
 
-    setError("");
-    setMessage("");
-    setSelectedFile(file);
-  };
+    let active = true;
+    getUserDocuments()
+      .then((result) => {
+        if (active) setDocuments(Array.isArray(result.documents) ? result.documents : []);
+      })
+      .catch(() => {
+        if (active) setDocumentsError("Saved documents could not be loaded. Try again.");
+      })
+      .finally(() => {
+        if (active) setDocumentsLoading(false);
+      });
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      setError("Please select a PDF file first.");
-      return;
-    }
+    getChatHistory()
+      .then((history) => {
+        if (active) setChats(Array.isArray(history) ? history : []);
+      })
+      .catch(() => {
+        if (active) setChatsError("Chat history could not be loaded. Try again.");
+      })
+      .finally(() => {
+        if (active) setChatsLoading(false);
+      });
 
-    setUploading(true);
-    setMessage("");
-    setError("");
-    setAnalysis(null);
+    return () => {
+      active = false;
+    };
+  }, [profile]);
 
-    try {
-      const result = await uploadDocument(selectedFile);
-
-      setAnalysis(result.analysis);
-      setMessage(result.message);
-    } catch (err) {
-      console.error("Document upload error:", err);
-
-      setError(err.message || "Failed to upload document.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const loadDocuments = async () => {
+  const refreshDocuments = async () => {
     setDocumentsLoading(true);
-    setError("");
-
+    setDocumentsError("");
     try {
       const result = await getUserDocuments();
-
-      setDocuments(result.documents);
-    } catch (err) {
-      console.error("Error loading documents:", err);
-
-      setError(
-        err.message || "Failed to load recent documents."
-      );
+      setDocuments(Array.isArray(result.documents) ? result.documents : []);
+    } catch {
+      setDocumentsError("Saved documents could not be refreshed. Try again.");
     } finally {
       setDocumentsLoading(false);
     }
   };
 
-  const loadChats = async () => {
+  const refreshChats = async () => {
+    setChatsLoading(true);
+    setChatsError("");
     try {
-      setChatHistoryLoading(true);
-
-      const chats = await getChatHistory();
-
-      setChatHistory(chats);
-
-    } catch (error) {
-      console.error("Error loading chat history:",error);
+      const result = await getChatHistory();
+      setChats(Array.isArray(result) ? result : []);
+    } catch {
+      setChatsError("Chat history could not be refreshed. Try again.");
     } finally {
-      setChatHistoryLoading(false);
+      setChatsLoading(false);
     }
   };
 
-  const handleAskQuestion = async (event) => {
+  const handleAuthSubmit = async (event) => {
     event.preventDefault();
-
-    if (!chatQuestion.trim()) {
+    const signup = path === "/signup";
+    setAuthError("");
+    setAuthMessage("");
+    if (signup && password !== confirmPassword) {
+      setAuthError("Passwords do not match.");
       return;
     }
 
-    setChatLoading(true);
-    setChatResponse(null);
-    setError("");
-
+    setAuthBusy(true);
     try {
-      const result = await askLegalQuestion(chatQuestion);
-
-      // Show current AI response
-      setChatResponse(result);
-
-      // Clear input
-      setChatQuestion("");
-
-      // Refresh chat history after successful question
-      await loadChats();
-
-    } catch (err) {
-      console.error("Error asking legal question:", err);
-
-      setError(
-        err.message || "Failed to get legal rights response."
-      );
-    } finally {
-      setChatLoading(false);
-    }
-  };
-
-  const handleViewAnalysis = (document) => {
-    setSelectedDocument(document);
-  };
-
-  const handleDeleteDocument = async (document) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${document.filename}"?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setError("");
-    setMessage("");
-
-    try {
-      await deleteDocument(document.id);
-
-      setMessage(
-        `"${document.filename}" deleted successfully.`
-      );
-
-      // Clear analysis if the deleted document is currently selected
-      if (selectedDocument?.id === document.id) {
-        setSelectedDocument(null);
+      if (signup) {
+        const result = await signupUser(email.trim(), password, name.trim());
+        setProfile(result.profile);
+      } else {
+        await loginUser(email.trim(), password);
+        setProfile(await getCurrentUserProfile());
       }
-
-      // Refresh the Recent Documents list
-      await loadDocuments();
-    } catch (err) {
-      console.error("Error deleting document:", err);
-
-      setError(err.message || "Failed to delete document.");
+      setPassword("");
+      setConfirmPassword("");
+      navigate("/app/dashboard");
+    } catch (error) {
+      setAuthError(authErrorMessage(error, signup));
+    } finally {
+      setAuthBusy(false);
     }
   };
 
   const handleLogout = async () => {
     try {
       await logoutUser();
-
-      setUser(null);
-      setMessage("");
-      setError("");
-    } catch (err) {
-      setError("Logout failed.");
+      setProfile(null);
+      setDocuments([]);
+      setChats([]);
+      setAnswer(null);
+      setAnalysis(null);
+      navigate("/");
+    } catch {
+      setNotice({ kind: "error", text: "Sign-out failed. Please try again." });
     }
   };
 
-  // Show loading screen while Firebase checks existing session
-  if (loading) {
+  const acceptFile = (file) => {
+    setNotice(null);
+    if (!file) {
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setNotice({ kind: "error", text: "Only PDF files are allowed." });
+      return;
+    }
+    if (file.size > MAX_DOCUMENT_SIZE) {
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setNotice({ kind: "error", text: "PDF file size must not exceed 10 MiB." });
+      return;
+    }
+    setSelectedFile(file);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || uploading) return;
+    setUploading(true);
+    setAnalysis(null);
+    setNotice(null);
+    try {
+      const result = await uploadDocument(selectedFile);
+      setAnalysis(result.analysis || null);
+      setNotice({ kind: "success", text: result.message || "Document analysis completed." });
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await refreshDocuments();
+    } catch {
+      setNotice({ kind: "error", text: "The document could not be analyzed. Check the file and connection, then try again." });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (document) => {
+    if (deletingId) return;
+    const confirmed = window.confirm(`Delete the saved analysis for "${document.filename || "this document"}"? The original PDF is not stored as a retrievable document by this application.`);
+    if (!confirmed) return;
+    setDeletingId(document.id);
+    setNotice(null);
+    try {
+      await deleteDocument(document.id);
+      setDocuments((items) => items.filter((item) => item.id !== document.id));
+      setNotice({ kind: "success", text: "Saved document analysis deleted." });
+      if (path === `/app/documents/${encodeURIComponent(document.id)}`) {
+        navigate("/app/documents");
+      }
+    } catch {
+      setNotice({ kind: "error", text: "The saved analysis could not be deleted. Please try again." });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleAskQuestion = async (event) => {
+    event.preventDefault();
+    if (asking || !question.trim()) return;
+    setAsking(true);
+    setNotice(null);
+    setAnswer(null);
+    try {
+      const result = await askLegalQuestion(question.trim());
+      setAnswer(result);
+      setQuestion("");
+      await refreshChats();
+    } catch {
+      setNotice({ kind: "error", text: "The question could not be answered. Check your connection and try again." });
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  if (!authReady) return <LoadingScreen />;
+
+  const isAuthenticatedPage = path.startsWith("/app/");
+  if (isAuthenticatedPage && !profile) return <LoadingScreen label="Opening sign-in" />;
+
+  if (path === "/login" || path === "/signup") {
     return (
-      <div className="loading-screen">
-        <p>Loading NyayaSetu AI...</p>
-      </div>
+      <AuthPage
+        mode={path === "/signup" ? "signup" : "login"}
+        name={name}
+        email={email}
+        password={password}
+        confirmPassword={confirmPassword}
+        onNameChange={setName}
+        onEmailChange={setEmail}
+        onPasswordChange={setPassword}
+        onConfirmPasswordChange={setConfirmPassword}
+        onSubmit={handleAuthSubmit}
+        error={authError || sessionError}
+        message={authMessage}
+        busy={authBusy}
+      />
     );
   }
 
-  // Dashboard
-  if (user) {
-    return (
-      <div className="app">
-        <aside className="app-sidebar">
-          <a className="sidebar-brand" href="#dashboard-top">
-            <span className="brand-mark">N</span>
-            <span>
-              <strong>NyayaSetu</strong>
-              <small>LEGAL INTELLIGENCE</small>
-            </span>
-          </a>
-
-          <p className="sidebar-label">WORKSPACE</p>
-
-          <nav className="sidebar-nav" aria-label="Dashboard navigation">
-            <a className="sidebar-link active" href="#dashboard-top">
-              <span>▦</span> Dashboard
-            </a>
-            <a className="sidebar-link" href="#document-upload">
-              <span>▤</span> Analyze Document
-            </a>
-            <a className="sidebar-link" href="#rights-chat">
-              <span>⚖</span> Know Your Rights
-            </a>
-            <a className="sidebar-link" href="#recent-documents">
-              <span>◷</span> Recent Documents
-            </a>
-          </nav>
-
-          <div className="sidebar-note">
-            <span className="sidebar-note-icon">✦</span>
-            <strong>Legal clarity, made simple.</strong>
-            <p>Understand documents and explore your rights with AI assistance.</p>
-          </div>
-
-          <div className="sidebar-footer">
-            <span className="sidebar-status-dot" />
-            AI assistant workspace
-          </div>
-        </aside>
-
-        <nav className="navbar">
-          <div className="logo"> NyayaSetu AI</div>
-
-          <div className="user-section">
-            <span className="user-name">{user.name}</span>
-
-            <button className="logout-button" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
-        </nav>
-
-
-        <main className="dashboard">
-          <section className="hero" id="dashboard-top">
-            <h1>Welcome, {user.name}!</h1>
-
-            <p>
-              Your AI-powered assistant for legal documents and rights.
-            </p>
-          </section>
-
-          <section className="feature-grid">
-            <div className="feature-card" id="document-upload">
-              <h2>📄 Analyze Document</h2>
-
-              <p>
-                Upload a legal document and let NyayaSetu AI analyze
-                important information, clauses and potential concerns.
-              </p>
-
-              <div className="upload-area">
-                <aside className="upload-privacy-notice" aria-label="Document privacy notice">
-                  <strong>Document privacy</strong>
-                  <p>
-                    To analyze a PDF, its extracted text is sent to the configured
-                    Google Gemini service. The PDF is temporarily written to this
-                    server's local uploads folder while processing; cleanup is
-                    attempted afterward, but a cleanup failure may leave a local copy.
-                  </p>
-                  <p>
-                    Firestore stores the filename and AI-generated analysis with
-                    your account for recent documents. Deleting a document removes
-                    that Firestore record. The app does not control or verify the
-                    AI provider's data retention. Do not upload documents you are
-                    not authorized to share.
-                  </p>
-                </aside>
-
-                <input
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={handleFileChange}
-                />
-
-                {selectedFile && (
-                  <p>
-                    Selected file: <strong>{selectedFile.name}</strong>
-                  </p>
-                )}
-
-                <button
-                onClick={handleUpload}
-                disabled={!selectedFile || uploading}
-                >
-                  {uploading ? "Analyzing..." : "Upload PDF"}
-                </button>
-              </div>
-            </div>
-
-            <div className="feature-card">
-              <h2>⚖️ Know Your Rights</h2>
-
-              <p>
-                Ask questions about your legal rights and receive
-                AI-powered explanations in simple language.
-              </p>
-
-              <button
-              onClick={() => {
-                document
-                  .getElementById("rights-chat")
-                  ?.scrollIntoView({ behavior: "smooth" });
-              }}
-              >
-                Ask a Question
-              </button>
-            
-            </div>
-          </section>
-
-          {analysis && (
-            <section className="documents-section">
-              <h2>Document Analysis</h2>
-
-              <p>
-                <strong>Document Type:</strong>{" "}
-                {analysis.document_type}
-              </p>
-
-              <p>
-                <strong>Summary:</strong>{" "}
-                {analysis.summary}
-              </p>
-
-              <h3>Important Clauses</h3>
-
-              <ul>
-                {analysis.important_clauses.map((clause, index) => (
-                  <li key={index}>{clause}</li>
-                ))}
-              </ul>
-
-              <h3>Rights</h3>
-
-              <ul>
-                {analysis.rights.map((right, index) => (
-                  <li key={index}>{right}</li>
-                ))}
-              </ul>
-
-              <h3>Obligations</h3>
-
-              <ul>
-                {analysis.obligations.map((obligation, index) => (
-                  <li key={index}>{obligation}</li>
-                ))}
-              </ul>
-
-              <h3>Risks</h3>
-
-              <ul>
-                {analysis.risks.map((risk, index) => (
-                  <li key={index}>{risk}</li>
-                ))}
-              </ul>
-
-              <EvidenceFindings findings={analysis.evidence_findings} />
-
-              <h3>Contract Completeness Checker</h3>
-
-              {Array.isArray(analysis.completeness_check) &&
-              analysis.completeness_check.length > 0 ? (
-                <div className="completeness-check-list">
-                  {analysis.completeness_check.map((item, index) => (
-                    <article
-                      className="completeness-check-card"
-                      key={`${item.field_name}-${index}`}
-                    >
-                      <div className="completeness-check-header">
-                        <h4>{item.field_name || "Document Field"}</h4>
-
-                        <span
-                          className={`completeness-status completeness-status-${String(
-                            item.status || "Needs Review"
-                          ).toLowerCase().replace(/\s+/g, "-")}`}
-                        >
-                          {item.status === "Not Found"
-                            ? "Not found in extracted text"
-                            : item.status || "Needs Review"}
-                        </span>
-                      </div>
-
-                      <p>
-                        {item.explanation ||
-                          "No explanation was provided for this field."}
-                      </p>
-                      {item.evidence_verified && item.evidence_text && (
-                        <blockquote>{item.evidence_text}</blockquote>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p>
-                  Completeness check results are unavailable for this document.
-                  Please check the API response if this message persists.
-                </p>
-              )}
-
-              <p className="completeness-check-note">
-                “Not found” means the information was not found in extracted text;
-                it may still appear in the original PDF. This is not a legal-validity
-                determination.
-              </p>
-
-              <h3>Clause Risk Radar</h3>
-
-              {Array.isArray(analysis.clause_risks) &&
-              analysis.clause_risks.length > 0 ? (
-                <div className="clause-risk-list">
-                  {analysis.clause_risks.map((risk, index) => (
-                    <article
-                      className="clause-risk-card"
-                      key={`${risk.severity}-${index}`}
-                    >
-                      <div className="clause-risk-header">
-                        <h4>Potential Risk {index + 1}</h4>
-
-                        <span
-                          className={`risk-severity risk-severity-${String(
-                            risk.evidence_verified && risk.severity
-                              ? risk.severity
-                              : "unrated"
-                          ).toLowerCase()}`}
-                        >
-                          {risk.evidence_verified && risk.severity
-                            ? risk.severity
-                            : "Not assessed"}
-                        </span>
-                      </div>
-
-                      <p>
-                        <strong>Supporting clause:</strong>{" "}
-                        {risk.evidence_verified && risk.clause_text
-                          ? risk.clause_text
-                          : "No exact supporting excerpt was verified in the extracted text."}
-                      </p>
-
-                      <p>
-                        <strong>Why it may matter:</strong>{" "}
-                        {risk.explanation || "No explanation supplied."}
-                      </p>
-
-                      {Array.isArray(risk.verification_questions) &&
-                      risk.verification_questions.length > 0 && (
-                        <>
-                          <strong>Questions to verify</strong>
-                          <ul>
-                            {risk.verification_questions.map((question, qIndex) => (
-                              <li key={qIndex}>{question}</li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p>
-                  No structured clause-risk findings were returned for this document.
-                  Review the general risks above before making important decisions.
-                </p>
-              )}
-
-              <p className="risk-radar-note">
-                AI-generated screening only; this is not a legal opinion or a finding
-                that a clause is unlawful.
-              </p>
-
-              <h3>Important Dates</h3>
-
-              <ul>
-                {analysis.important_dates.map((date, index) => (
-                  <li key={index}>{date}</li>
-                ))}
-              </ul>
-
-              <p>
-                <strong>Disclaimer:</strong>{" "}
-                {analysis.disclaimer}
-              </p>
-            </section>
-          )}
-
-          {/* Know Your Rights Chat */}
-          <section className="rights-chat-section" id="rights-chat">
-            <h2>⚖️ Know Your Rights</h2>
-
-            <p>
-              Ask a question about your legal rights and get a
-              simple AI-powered explanation.
-            </p>
-
-            <form
-            onSubmit={handleAskQuestion}
-            className="rights-chat-form"
-            >
-              <textarea
-              value={chatQuestion}
-              onChange={(event) =>
-                setChatQuestion(event.target.value)
-              }
-              placeholder="Ask your legal rights question..."
-              rows="4"
-              required
-              />
-
-              <button
-              type="submit"
-              disabled={chatLoading}
-              >
-                {chatLoading
-                ? "Analyzing..."
-                : "Ask Question"}
-              </button>
-            </form>
-
-            {error && (
-              <p className="error-message">
-                {error}
-              </p>
-            )}
-
-            {/* Current AI Response */}
-            {chatResponse && (
-              <div className="rights-response">
-
-                <h3>Situation Summary</h3>
-                <p>
-                  {chatResponse.situation_summary ||
-                    chatResponse.answer ||
-                    "No situation summary available."}
-                </p>
-
-                <h3>Answer</h3>
-
-                <p>{chatResponse.answer}</p>
-
-                <h3>Your Possible Rights</h3>
-                {chatResponse.rights?.length > 0 ? (
-                  <ul>
-                    {chatResponse.rights.map((right, index) => (
-                      <li key={index}>{right}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No rights information available.</p>
-                )}
-
-                <h3>Step-by-Step Action Plan</h3>
-                {chatResponse.action_plan?.length > 0 ? (
-                  <ol>
-                    {chatResponse.action_plan.map((step, index) => (
-                      <li key={index}>{step}</li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p>No action plan available.</p>
-                )}
-
-                <h3>Evidence Checklist</h3>
-                {chatResponse.evidence_checklist?.length > 0 ? (
-                  <ul className="evidence-checklist">
-                    {chatResponse.evidence_checklist.map((item, index) => (
-                      <li key={index}>
-                        <label>
-                          <input type="checkbox" />
-                          <span>{item}</span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No evidence checklist available.</p>
-                )}
-
-                <h3>Questions to Clarify</h3>
-                {chatResponse.questions_to_clarify?.length > 0 ? (
-                  <ul>
-                    {chatResponse.questions_to_clarify.map((question, index) => (
-                      <li key={index}>{question}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No additional questions suggested.</p>
-                )}
-
-                <h3>Important Points</h3>
-                {chatResponse.important_points?.length > 0 ? (
-                  <ul>
-                    {chatResponse.important_points.map((point, index) => (
-                      <li key={index}>{point}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No additional points available.</p>
-                )}
-
-                <h3>When to Seek Help</h3>
-                {chatResponse.when_to_seek_help?.length > 0 ? (
-                  <ul>
-                    {chatResponse.when_to_seek_help.map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>Consider consulting a qualified legal professional for
-                    important or uncertain legal matters.</p>
-                )}
-
-                <div className="disclaimer">
-                  <strong>Disclaimer:</strong>
-
-                  <p>{chatResponse.disclaimer}</p>
-                </div>
-
-              </div>
-            )}
-
-            {/* Chat History */}
-            <div className="chat-history">
-
-              <h3>📚 Previous Questions</h3>
-
-              {chatHistoryLoading ? (
-                <p>Loading chat history...</p>
-              ) : chatHistory.length === 0 ? (
-                <p>No previous questions yet.</p>
-              ) : (
-                <div className="chat-history-list">
-                  
-                  {chatHistory.map((chat) => (
-                    <div
-                    className="chat-history-card"
-                    key={chat.id}
-                    >
-
-                      <p>
-                        <strong>Question:</strong>{" "}
-                        {chat.question}
-                      </p>
-
-                      <button
-                      type="button"
-                      onClick={() => setChatResponse(chat)}
-                      >
-                      View Answer
-                      </button>
-
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-          
-          {/* Recent Documents */}
-          <section className="documents-section" id="recent-documents">
-            <h2>Recent Documents</h2>
-
-            {documentsLoading ? (
-              <div className="empty-documents">
-                <p>Loading documents...</p>
-              </div>
-            ) : documents.length === 0 ? (
-              <div className="empty-documents">
-                <p>No documents analyzed yet.</p>
-
-                <p>
-                  Upload your first legal document to get started.
-                </p>
-              </div>
-            ) : (
-              <div className="recent-documents-list">
-                {documents.map((document) => (
-                  <div 
-                  className="recent-document-card"
-                  key={document.id}
-                  >
-                    <h3>📄 {document.filename}</h3>
-
-                    <p>
-                      <strong>Document Type:</strong>{" "}
-                      {document.analysis?.document_type}
-                    </p>
-
-                    <p>
-                      <strong>Status:</strong>{" "}
-                      {document.status}
-                    </p>
-
-                    <div className="document-actions">
-                      <button
-                        onClick={() => handleViewAnalysis(document)}
-                      >
-                        View Analysis
-                      </button>
-
-                      <button
-                        className="delete-document-button"
-                        onClick={() => handleDeleteDocument(document)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {selectedDocument && (
-            <section className="documents-section">
-              <h2>Document Analysis</h2>
-
-              {isLegacyAnalysis(selectedDocument.analysis) && (
-                <p className="legacy-analysis-note" role="note">
-                  <strong>Legacy analysis — evidence not verified.</strong>{" "}
-                  Existing clauses and risks are shown for reference; the source
-                  PDF text is not available to re-check them.
-                </p>
-              )}
-
-              <p>
-                <strong>Document:</strong>{" "}
-                {selectedDocument.filename}
-              </p>
-
-              <p>
-                <strong>Document Type:</strong>{" "}
-                {selectedDocument.analysis?.document_type}
-              </p>
-
-              <p>
-                <strong>Summary:</strong>{" "}
-                {selectedDocument.analysis?.summary}
-              </p>
-
-              <h3>Important Clauses</h3>
-              <ul>
-                {selectedDocument.analysis?.important_clauses?.map(
-                  (clause, index) => (
-                    <li key={index}>{clause}</li>
-                  )
-                )}
-              </ul>
-
-              <h3>Rights</h3>
-              <ul>
-                {selectedDocument.analysis?.rights?.map(
-                  (right, index) => (
-                    <li key={index}>{right}</li>
-                  )
-                )}
-              </ul>
-
-              <h3>Obligations</h3>
-              <ul>
-                {selectedDocument.analysis?.obligations?.map(
-                  (obligation, index) => (
-                    <li key={index}>{obligation}</li>
-                  )
-                )}
-              </ul>
-
-              <h3>Risks</h3>
-              <ul>
-                {selectedDocument.analysis?.risks?.map(
-                  (risk, index) => (
-                    <li key={index}>{risk}</li>
-                  )
-                )}
-              </ul>
-
-              <EvidenceFindings
-                findings={selectedDocument.analysis?.evidence_findings}
-              />
-
-              <h3>Contract Completeness Checker</h3>
-
-              {Array.isArray(selectedDocument.analysis?.completeness_check) &&
-              selectedDocument.analysis.completeness_check.length > 0 ? (
-                <div className="completeness-check-list">
-                  {selectedDocument.analysis.completeness_check.map((item, index) => (
-                    <article className="completeness-check-card" key={`${item.field_name}-${index}`}>
-                      <div className="completeness-check-header">
-                        <h4>{item.field_name || "Document Field"}</h4>
-                        <span
-                          className={`completeness-status completeness-status-${String(
-                            item.status || "Needs Review"
-                          ).toLowerCase().replace(/\s+/g, "-")}`}
-                        >
-                          {item.status === "Not Found"
-                            ? "Not found in extracted text"
-                            : item.status || "Needs Review"}
-                        </span>
-                      </div>
-                      <p>
-                        {item.explanation || "No explanation was provided for this field."}
-                      </p>
-                      {item.evidence_verified && item.evidence_text && (
-                        <blockquote>{item.evidence_text}</blockquote>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p>
-                  Completeness check results are unavailable for this document.
-                  Upload the PDF again to run the updated checker.
-                </p>
-              )}
-
-              <p className="completeness-check-note">
-                “Not found” means the information was not found in extracted text;
-                it may still appear in the original PDF. This is not a legal-validity
-                determination.
-              </p>
-
-              <h3>Clause Risk Radar</h3>
-
-              {Array.isArray(selectedDocument.analysis?.clause_risks) &&
-              selectedDocument.analysis.clause_risks.length > 0 ? (
-                <div className="clause-risk-list">
-                  {selectedDocument.analysis.clause_risks.map((risk, index) => (
-                    <article
-                      className="clause-risk-card"
-                      key={`${risk.severity}-${index}`}
-                    >
-                      <div className="clause-risk-header">
-                        <h4>Potential Risk {index + 1}</h4>
-
-                        <span
-                          className={`risk-severity risk-severity-${String(
-                            risk.evidence_verified && risk.severity
-                              ? risk.severity
-                              : "unrated"
-                          ).toLowerCase()}`}
-                        >
-                          {risk.evidence_verified && risk.severity
-                            ? risk.severity
-                            : "Not assessed"}
-                        </span>
-                      </div>
-
-                      <p>
-                        <strong>Supporting clause:</strong>{" "}
-                        {risk.evidence_verified && risk.clause_text
-                          ? risk.clause_text
-                          : "No exact supporting excerpt was verified in the extracted text."}
-                      </p>
-
-                      <p>
-                        <strong>Why it may matter:</strong>{" "}
-                        {risk.explanation || "No explanation supplied."}
-                      </p>
-
-                      {Array.isArray(risk.verification_questions) &&
-                      risk.verification_questions.length > 0 && (
-                        <>
-                          <strong>Questions to verify</strong>
-                          <ul>
-                            {risk.verification_questions.map((question, qIndex) => (
-                              <li key={qIndex}>{question}</li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p>
-                  No structured clause-risk findings were returned for this document.
-                  Review the general risks above before making important decisions.
-                </p>
-              )}
-
-              <p className="risk-radar-note">
-                AI-generated screening only; this is not a legal opinion or a finding
-                that a clause is unlawful.
-              </p>
-
-              <h3>Important Dates</h3>
-              <ul>
-                {selectedDocument.analysis?.important_dates?.map(
-                  (date, index) => (
-                    <li key={index}>{date}</li>
-                  )
-                )}
-              </ul>
-
-              <p>
-                <strong>Disclaimer:</strong>{" "}
-                {selectedDocument.analysis?.disclaimer}
-              </p>
-
-              <button
-                onClick={() => setSelectedDocument(null)}
-              >
-                Close Analysis
-              </button>
-            </section>
-          )}
-          
-        </main>
-      </div>
-    );
+  if (path === "/" || path === "/features" || path === "/about" || path === "/faq" || path === "/privacy") {
+    if (path === "/" || path === "/features") {
+      return <LandingPage authenticated={Boolean(profile)} />;
+    }
+    return <InformationPage page={path.slice(1)} authenticated={Boolean(profile)} />;
   }
 
-  // Login / Signup screen
+  if (!isAuthenticatedPage) return <NotFoundPage authenticated={Boolean(profile)} />;
+
+  const detailMatch = path.match(/^\/app\/documents\/(.+)$/);
+  const conversationMatch = path.match(/^\/app\/history\/(.+)$/);
+  let page = path;
+  if (detailMatch) page = "/app/documents";
+  if (conversationMatch) page = "/app/history";
+
+  const pageTitles = {
+    "/app/dashboard": "Overview",
+    "/app/analyze": "Analyze a document",
+    "/app/documents": "Document library",
+    "/app/assistant": "Rights assistant",
+    "/app/history": "Chat history",
+    "/app/profile": "Account",
+  };
+  const title = pageTitles[page];
+  if (!title) return <NotFoundPage authenticated />;
+
+  let content;
+  if (page === "/app/dashboard") {
+    content = <DashboardPage profile={profile} documents={documents} chats={chats} documentsLoading={documentsLoading} chatsLoading={chatsLoading} navigate={navigate} />;
+  } else if (page === "/app/analyze") {
+    content = <UploadPage file={selectedFile} fileInputRef={fileInputRef} onChooseFile={acceptFile} onDropFile={acceptFile} onUpload={handleUpload} uploading={uploading} analysis={analysis} notice={notice} clearNotice={() => setNotice(null)} />;
+  } else if (page === "/app/documents" && detailMatch) {
+    let documentId;
+    try {
+      documentId = decodeURIComponent(detailMatch[1]);
+    } catch {
+      documentId = "";
+    }
+    const document = documents.find((item) => item.id === documentId);
+    content = documentsLoading ? <div className="loading-state" role="status"><span className="spinner" />Loading document…</div> : document ? <div className="page-stack"><PageHeading eyebrow="SAVED ANALYSIS" title={document.filename || "Document details"} action={<button type="button" className="button button-danger-outline" onClick={() => handleDeleteDocument(document)} disabled={deletingId === document.id}>{deletingId === document.id ? "Deleting…" : "Delete analysis"}</button>} />{notice && <Notice kind={notice.kind} onDismiss={() => setNotice(null)}>{notice.text}</Notice>}<section className="content-panel"><DocumentAnalysisView analysis={document.analysis} filename={document.filename} /></section></div> : <NotFoundPage authenticated />;
+  } else if (page === "/app/documents") {
+    content = <DocumentsPage documents={documents} loading={documentsLoading} error={documentsError} onDelete={handleDeleteDocument} navigate={navigate} />;
+  } else if (page === "/app/assistant") {
+    content = <AssistantPage question={question} setQuestion={setQuestion} onSubmit={handleAskQuestion} loading={asking} answer={answer} notice={notice} clearNotice={() => setNotice(null)} />;
+  } else if (page === "/app/history" && conversationMatch) {
+    let conversationId;
+    try {
+      conversationId = decodeURIComponent(conversationMatch[1]);
+    } catch {
+      conversationId = "";
+    }
+    const chat = chats.find((item) => item.id === conversationId);
+    content = chatsLoading ? <div className="loading-state" role="status"><span className="spinner" />Loading conversation…</div> : <ConversationPage chat={chat} />;
+  } else if (page === "/app/history") {
+    content = <HistoryPage chats={chats} loading={chatsLoading} error={chatsError} />;
+  } else {
+    content = <ProfilePage profile={profile} onLogout={handleLogout} />;
+  }
+
   return (
-    <div className="app">
-      <main className="dashboard">
-        <section className="hero">
-          <h1>NyayaSetu AI</h1>
-
-          <p>
-            Smart Legal Documents & Rights Assistant
-          </p>
-        </section>
-
-        <div className="documents-section">
-          <h2>{isSignup ? "Create Account" : "Login"}</h2>
-
-          <form onSubmit={handleSubmit}>
-            {isSignup && (
-              <div>
-                <label>Name</label>
-                <br />
-
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Enter your name"
-                  required
-                />
-              </div>
-            )}
-
-            <br />
-
-            <div>
-              <label>Email</label>
-              <br />
-
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="Enter your email"
-                required
-              />
-            </div>
-
-            <br />
-
-            <div>
-              <label>Password</label>
-              <br />
-
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter your password"
-                required
-              />
-            </div>
-
-            {isSignup && (
-              <>
-                <br />
-
-                <div>
-                  <label>Confirm Password</label>
-                  <br />
-
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) =>
-                      setConfirmPassword(event.target.value)
-                    }
-                    placeholder="Confirm your password"
-                    required
-                  />
-                </div>
-              </>
-            )}
-
-            <br />
-
-            <button type="submit">
-              {isSignup ? "Create Account" : "Login"}
-            </button>
-          </form>
-
-          {message && <p>{message}</p>}
-
-          {error && <p>{error}</p>}
-
-          <hr />
-
-          <button
-            onClick={() => {
-              setIsSignup(!isSignup);
-              setMessage("");
-              setError("");
-            }}
-          >
-            {isSignup
-              ? "Already have an account? Login"
-              : "Don't have an account? Sign Up"}
-          </button>
-        </div>
-      </main>
-    </div>
+    <AppShell page={page} title={title} profile={profile} onLogout={handleLogout}>
+      {notice && page !== "/app/analyze" && page !== "/app/assistant" && !(page === "/app/documents" && detailMatch) && <Notice kind={notice.kind} onDismiss={() => setNotice(null)}>{notice.text}</Notice>}
+      {content}
+    </AppShell>
   );
 }
 

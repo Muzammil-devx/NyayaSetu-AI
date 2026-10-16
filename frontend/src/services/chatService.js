@@ -1,7 +1,5 @@
 import { auth } from "../firebase/firebase";
-
-// Backend API URL
-const API_URL = "http://127.0.0.1:8000";
+import { apiUrl } from "./api";
 
 // Ask Legal Rights Question
 export const askLegalQuestion = async (message) => {
@@ -17,7 +15,7 @@ export const askLegalQuestion = async (message) => {
     const idToken = await user.getIdToken();
 
     // Send question to FastAPI
-    const response = await fetch(`${API_URL}/api/chat`, {
+    const response = await fetch(apiUrl("/api/chat"), {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -79,7 +77,7 @@ export const getChatHistory = async () => {
     const idToken = await user.getIdToken();
 
     // Request chat history from FastAPI
-    const response = await fetch(`${API_URL}/api/chats`, {
+    const response = await fetch(apiUrl("/api/chats"), {
         method: "GET",
         headers: {
             Authorization: `Bearer ${idToken}`,
